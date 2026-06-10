@@ -8,7 +8,7 @@ const defaultPassword2 = "#okxJ-,5fFwNQJ=^Zm6^wOHf}Hv.ec#XQX6SezPx8KP7zZZy3G";
 if (!localStorage.password) localStorage.password = defaultPassword2;
 
 const socketServers = {
-    0: { socket: new WebSocket(`ws://${location.hostname}:8100`), alts: {} }
+    0: { socket: new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.hostname}/ws`), alts: {} }
 }
 
 const getElement = (Element) => document.getElementsByClassName(Element);

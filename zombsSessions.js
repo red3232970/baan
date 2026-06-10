@@ -14,6 +14,17 @@ app.get("/", (req, res) => {
     res.sendFile(__dirname + "/client.html");
 });
 
+app.use(express.static("public"));
+
+app.get("/", (req, res) => {
+    res.sendFile(__dirname + "/client.html");
+});
+
+// ADICIONE ESTA LINHA:
+app.get('/zombs_wasm.wasm', (req, res) => {
+    res.sendFile(__dirname + '/zombs_wasm.wasm');
+});
+
 const WebSocket = require("ws");
 const ByteBuffer = require("bytebuffer");
 const fs = require("fs");

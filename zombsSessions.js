@@ -1,3 +1,19 @@
+const express = require("express");
+const http = require("http");
+
+// Criar servidor HTTP unificado
+const app = express();
+const server = http.createServer(app);
+const PORT = process.env.PORT || 10000;
+
+// Servir arquivos estáticos
+app.use(express.static("public"));
+
+// Rota principal
+app.get("/", (req, res) => {
+    res.sendFile(__dirname + "/client.html");
+});
+
 const WebSocket = require("ws");
 const ByteBuffer = require("bytebuffer");
 const fs = require("fs");
@@ -8,7 +24,8 @@ const { setFlagsFromString } = require("node:v8");
 setFlagsFromString("--expose_gc");
 const gc = runInNewContext("gc");
 
-const wss = new WebSocket.Server({ port: 8090, maxPayload: 65536 });
+// ADICIONAR ISSO:
+const wss = new WebSocket.Server({ server, path: '/ws', maxPayload: 65536 });
 
 let connectionCounts = 0;
 let sessionCounts = 0;
@@ -2487,6 +2504,13 @@ const wasmmodule = () => {
     }
     return Module;
 }
+
+// ADICIONAR ISSO NO FINAL DO ARQUIVO:
+server.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 Servidor rodando na porta ${PORT}`);
+    console.log(`🔌 WebSocket disponível em: ws://localhost:${PORT}/ws`);
+    console.log(`🌐 Interface web: http://localhost:${PORT}`);
+});
 
 setInterval(() => {
     serverMap.forEach((e) => {

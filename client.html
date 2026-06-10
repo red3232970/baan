@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>BANSHEE - Session Manager</title>
+    <title>BANSHEE</title>
     <link rel="icon" type="image/x-icon" href="/images/icons/favicon.ico">
     <link rel="stylesheet" type="text/css" href="https://fonts.googleapis.com/css?family=Hammersmith+One:400">
     <link rel="stylesheet" href="/app.css?v=menu-layer-fix">
@@ -17,13 +17,13 @@
                 <span class="hud-intro-credit"><span>Creator</span> L✡L✡L ヅ✓</span>
                 <span class="hud-intro-credit"><span>Designer</span> Sirr0m</span>
             </div>
-            <h2 class="hud-intro-player-count">BANSHEE Ready</h2>
+            <h2 class="hud-intro-player-count">Loading...</h2>
             <div class="hud-intro-main">
                 <div class="hud-intro-left">
                     <div class="session_saver"></div>
                 </div>
                 <div class="hud-intro-form">
-                    <input type="text" name="nickname" class="hud-intro-name" id="hud-intro-name" maxlength="29" placeholder="Your nickname..." value="Bot">
+                    <input type="text" name="nickname" class="hud-intro-name" id="hud-intro-name" maxlength="29" placeholder="Your nickname...">
                     <select class="hud-intro-server" name="server" id="serverSelect">
                         <optgroup label="US East">
                             <option value="v1001">US East #1 - v1001</option>
@@ -41,12 +41,12 @@
                             <option value="v2003">US West #3 - v2003</option>
                         </optgroup>
                         <optgroup label="Europe">
-                            <option value="v5001">Europe #1 - v5001</option>
+                            <option value="v5001" selected>Europe #1 - v5001</option>
                             <option value="v5002">Europe #2 - v5002</option>
                             <option value="v5003">Europe #3 - v5003</option>
                             <option value="v5004">Europe #4 - v5004</option>
                             <option value="v5005">Europe #5 - v5005</option>
-                            <option value="v5006" selected>Europe #6 - v5006</option>
+                            <option value="v5006">Europe #6 - v5006</option>
                             <option value="v5007">Europe #7 - v5007</option>
                         </optgroup>
                         <optgroup label="Asia">
@@ -57,8 +57,8 @@
                             <option value="v4002">Australia #2 - v4002</option>
                         </optgroup>
                     </select>
-                    <input type="text" id="partyKeyInput" placeholder="Party Share Key (opcional)" style="width: 100%; margin-top: 10px; background: #222; color: white; border: 1px solid #444; padding: 8px; border-radius: 4px;">
-                    <button type="submit" class="btn btn-green" id="sendSessionBtn" style="margin-top: 10px;">🚀 Send Session</button>
+                    <button type="submit" class="btn btn-green hud-intro-play" id="playBtn">Play</button>
+                    <button type="submit" class="btn btn-green hud-intro-play" id="sendSessionBtn">Send Session</button>
                     <span class="hud-intro-error"></span>
                     <label for="hud-intro-disable-loading">
                         <input type="checkbox" id="hud-intro-disable-loading" name="disableLoadingScreen" class="hud-intro-canvas" value="true">
@@ -69,13 +69,15 @@
             </div>
         </div>
     </div>
-    
+
+    <!-- Carregar scripts na ordem correta APENAS UMA VEZ -->
     <script src="/pixi.js"></script>
     <script src="/app.js?v=menu-layer-fix"></script>
+    
     <script>
         // ============================================================
-        // BANSHEE - VERSÃO CORRIGIDA PARA RENDER.COM
-        // WebSocket na porta correta (sem porta explícita)
+        // BANSHEE - VERSÃO CORRIGIDA
+        // WebSocket na porta correta (usando /ws, sem porta separada)
         // ============================================================
         
         (function() {
@@ -83,18 +85,15 @@
             
             // Configurações
             const defaultPassword = "=vo}+NpP,!zAsZT]NzXM1X,73Of'Jiff-K[o921DYFjoeF3ICv";
-            const WS_PATH = "/ws";  // Path do WebSocket no servidor
-            const PARTY_KEY = "ljegbelnqcljjozslswt";
-            const DEFAULT_SERVER = "v5006";
+            const WS_PATH = "/ws";
             
             if (!localStorage.salt) {
                 localStorage.salt = defaultPassword;
             }
             
-            // ========== WEBSOCKET CORRETO (SEM PORTA EXPLÍCITA) ==========
+            // WebSocket CORRETO (usando o mesmo host, path /ws)
             const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const wsUrl = `${wsProtocol}//${window.location.host}${WS_PATH}`;
-            
             console.log(`🔌 Conectando WebSocket em: ${wsUrl}`);
             
             let game = null;
@@ -138,7 +137,7 @@
                     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
                         this.ws.send(msg);
                     } else {
-                        console.warn("⚠️ WebSocket não está aberto, mensagem não enviada:", msg.substring(0, 50));
+                        console.warn("⚠️ WebSocket não está aberto");
                     }
                 }
                 
@@ -167,14 +166,9 @@
                                 console.error("Erro ao parsear sessões:", e);
                             }
                             break;
-                        case "prfpsks":
-                            // Lista de chaves, ignorar
-                            break;
                         default:
-                            if (cmd === "sessionstats" || cmd === "sessionstates") {
-                                // Stats, ignorar
-                            } else if (msg.includes("createsession") || msg.includes("verify")) {
-                                console.log("✅ Comando processado:", cmd);
+                            if (msg.includes("createsession")) {
+                                console.log("✅ Comando processado");
                             }
                     }
                 }
@@ -207,21 +201,18 @@
                 }
             }
             
-            // ========== FUNÇÕES DA INTERFACE ==========
-            
             function createSession() {
                 if (!userInstance) {
-                    alert("❌ Sistema não inicializado. Aguarde e tente novamente.");
+                    alert("❌ Sistema não inicializado.");
                     return;
                 }
                 
                 const nameInput = document.getElementById("hud-intro-name");
                 const serverSelect = document.getElementById("serverSelect");
-                const partyInput = document.getElementById("partyKeyInput");
                 
                 const name = nameInput ? nameInput.value.trim() : "Bot";
-                const server = serverSelect ? serverSelect.value : DEFAULT_SERVER;
-                const partyKey = partyInput ? partyInput.value.trim() : PARTY_KEY;
+                const server = serverSelect ? serverSelect.value : "v5006";
+                const partyKey = "ljegbelnqcljjozslswt";
                 
                 if (!name || name.length < 2) {
                     alert("❌ Digite um nickname válido (mínimo 2 caracteres)");
@@ -230,41 +221,9 @@
                 
                 userInstance.createSession(name, name, server, partyKey);
                 console.log(`✅ Bot "${name}" enviado para servidor ${server}`);
-                
-                // Feedback visual
-                const btn = document.getElementById("sendSessionBtn");
-                if (btn) {
-                    const originalText = btn.textContent;
-                    btn.textContent = "✅ Enviado!";
-                    setTimeout(() => { btn.textContent = originalText; }, 2000);
-                }
             }
             
-            function createMultipleBots() {
-                const count = parseInt(document.getElementById("multiCount")?.value || "5");
-                const baseName = document.getElementById("multiBaseName")?.value || "FarmBot";
-                const server = document.getElementById("serverSelect")?.value || DEFAULT_SERVER;
-                const partyKey = document.getElementById("partyKeyInput")?.value || PARTY_KEY;
-                
-                if (count > 50) {
-                    alert("⚠️ Limite de 50 bots por vez!");
-                    return;
-                }
-                
-                for (let i = 1; i <= count; i++) {
-                    setTimeout(() => {
-                        const name = `${baseName}${i}`;
-                        userInstance.createSession(name, name, server, partyKey);
-                        console.log(`🎮 Bot ${i}/${count}: ${name}`);
-                    }, i * 300);
-                }
-                
-                alert(`🚀 Criando ${count} bots: ${baseName}1 até ${baseName}${count}`);
-            }
-            
-            // ========== INICIALIZAÇÃO ==========
-            
-            // Criar instância do WebSocket
+            // Inicializar
             userInstance = new Ws();
             window.user = userInstance;
             
@@ -277,25 +236,6 @@
                 };
             }
             
-            // Adicionar seção de múltiplos bots
-            const formDiv = document.querySelector(".hud-intro-form");
-            if (formDiv) {
-                const multiHtml = `
-                    <hr style="border-color: #444; margin: 15px 0;">
-                    <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
-                        <input type="number" id="multiCount" placeholder="Qtd" value="5" style="background: #222; color: white; border: 1px solid #444; padding: 8px; width: 70px; border-radius: 4px;">
-                        <input type="text" id="multiBaseName" placeholder="Nome base" value="FarmBot" style="background: #222; color: white; border: 1px solid #444; padding: 8px; width: 120px; border-radius: 4px;">
-                        <button id="multiBotBtn" style="background: #2a6e2a; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">🎮 Criar Múltiplos</button>
-                    </div>
-                `;
-                formDiv.insertAdjacentHTML('beforeend', multiHtml);
-                
-                const multiBtn = document.getElementById("multiBotBtn");
-                if (multiBtn) {
-                    multiBtn.onclick = createMultipleBots;
-                }
-            }
-            
             // Configurar Session Saver
             const sessionDiv = document.querySelector(".session_saver");
             if (sessionDiv) {
@@ -305,7 +245,6 @@
                     <div style="font-size: 12px; color: #aaa;">
                         <p>✅ Bots conectados via WebSocket</p>
                         <p>🔗 As sessões são salvas no servidor</p>
-                        <p>🎯 Party atual: <code style="background:#000;padding:2px 4px;">${PARTY_KEY.substring(0, 15)}...</code></p>
                         <button id="refreshSessionsBtn" style="background: #333; color: white; border: 1px solid #555; padding: 4px 8px; margin-top: 8px; cursor: pointer;">🔄 Atualizar Sessões</button>
                     </div>
                     <div class="savedsessions" style="margin-top: 10px;"></div>
@@ -319,38 +258,47 @@
                 }
             }
             
-            // Guia de ajuda
-            const guideDiv = document.querySelector(".hud-intro-guide");
-            if (guideDiv) {
-                guideDiv.innerHTML = `
-                    <div style="text-align: center; padding: 10px;">
-                        <hr>
-                        <h4>📖 Como usar:</h4>
-                        <ol style="text-align: left; font-size: 12px;">
-                            <li>Digite um <strong>nickname</strong> para seu bot</li>
-                            <li>Escolha o <strong>servidor</strong> (recomendado: Europe #6)</li>
-                            <li>Se quiser party, cole o <strong>Party Share Key</strong></li>
-                            <li>Clique em <strong>"Send Session"</strong> para criar 1 bot</li>
-                            <li>Ou use <strong>"Criar Múltiplos"</strong> para vários de uma vez</li>
-                        </ol>
-                        <hr>
-                        <p style="font-size: 11px; color: #666;">🔒 BANSHEE - WebSocket corrigido para Render.com</p>
-                    </div>
-                `;
+            // Aguardar o game ser carregado para configurar o script.js
+            console.log("🔄 Aguardando inicialização do jogo...");
+            
+            function loadAdditionalScripts() {
+                if (typeof game !== 'undefined' && game && game.network) {
+                    console.log("✅ Game detectado, carregando script.js...");
+                    clearInterval(checkInterval);
+                    
+                    // Corrigir a URL do WebSocket no script.js
+                    window.__BANSHEE_WS_URL__ = wsUrl;
+                    
+                    const script = document.createElement('script');
+                    script.src = '/script.js?v=loading-slower';
+                    script.onload = () => console.log("✅ script.js carregado");
+                    script.onerror = () => console.error("❌ Erro ao carregar script.js");
+                    document.body.appendChild(script);
+                    return true;
+                }
+                return false;
             }
             
-            // Atualizar contador de jogadores
+            const checkInterval = setInterval(() => {
+                if (loadAdditionalScripts()) clearInterval(checkInterval);
+            }, 100);
+            
+            setTimeout(() => {
+                if (typeof game === 'undefined') {
+                    console.warn("⚠️ Timeout: game não detectado");
+                    clearInterval(checkInterval);
+                }
+            }, 10000);
+            
             const playerCountElem = document.querySelector(".hud-intro-player-count");
             if (playerCountElem) {
-                playerCountElem.innerText = "🟢 BANSHEE Online - Conectado via WebSocket";
+                playerCountElem.innerText = "🟢 BANSHEE Online";
             }
             
-            console.log("✅ BANSHEE inicializado com WebSocket corrigido!");
+            console.log("✅ BANSHEE inicializado!");
             console.log(`🔌 WebSocket URL: ${wsUrl}`);
-            console.log(`💡 Party Key padrão: ${PARTY_KEY}`);
         })();
     </script>
-    <script src="/script.js?v=loading-slower"></script>
-    <script src="/serverspots.js"></script>
+    <!-- script.js será carregado dinamicamente quando game estiver pronto -->
 </body>
 </html>

@@ -209,13 +209,18 @@
                 
                 const nameInput = document.getElementById("hud-intro-name");
                 const serverSelect = document.getElementById("serverSelect");
-                
+                const partyInput = document.getElementById("partyKeyInput");
                 const name = nameInput ? nameInput.value.trim() : "Bot";
                 const server = serverSelect ? serverSelect.value : "v5006";
-                const partyKey = "ljegbelnqcljjozslswt";
+                const partyKey = partyInput ? partyInput.value.trim() : "";
                 
                 if (!name || name.length < 2) {
                     alert("❌ Digite um nickname válido (mínimo 2 caracteres)");
+                    return;
+                }
+
+                if (!partyKey) {
+                    alert("❌ Digite a Party Share Key!");
                     return;
                 }
                 

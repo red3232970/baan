@@ -57,8 +57,8 @@
                             <option value="v4002">Australia #2 - v4002</option>
                         </optgroup>
                     </select>
-                    <button type="submit" class="btn btn-green hud-intro-play" id="playBtn">Play</button>
                     <input type="text" id="partyKeyInput" placeholder="Party Share Key" style="width: 100%; margin-top: 10px; background: #222; color: white; border: 1px solid #444; padding: 8px; border-radius: 4px;">
+                    <button type="submit" class="btn btn-green hud-intro-play">Play</button>
                     <button type="submit" class="btn btn-green hud-intro-play" id="sendSessionBtn">Send Session</button>
                     <span class="hud-intro-error"></span>
                     <label for="hud-intro-disable-loading">
@@ -71,14 +71,13 @@
         </div>
     </div>
 
-    <!-- Carregar scripts na ordem correta APENAS UMA VEZ -->
+    <!-- Carregar scripts na ordem correta -->
     <script src="/pixi.js"></script>
     <script src="/app.js?v=menu-layer-fix"></script>
     
     <script>
         // ============================================================
-        // BANSHEE - VERSÃO CORRIGIDA
-        // WebSocket na porta correta (usando /ws, sem porta separada)
+        // CORREÇÃO DO WEBSOCKET E DO BOTÃO SEND SESSION
         // ============================================================
         
         (function() {
@@ -86,20 +85,21 @@
             
             // Configurações
             const defaultPassword = "=vo}+NpP,!zAsZT]NzXM1X,73Of'Jiff-K[o921DYFjoeF3ICv";
-            const WS_PATH = "/ws";
             
             if (!localStorage.salt) {
                 localStorage.salt = defaultPassword;
             }
             
-            // WebSocket CORRETO (usando o mesmo host, path /ws)
+            // CORREÇÃO: WebSocket sem porta fixa!
             const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${wsProtocol}//${window.location.host}${WS_PATH}`;
-            console.log(`🔌 Conectando WebSocket em: ${wsUrl}`);
+            const wsUrl = `${wsProtocol}//${window.location.host}/ws`;
+            
+            console.log(`🔌 WebSocket URL: ${wsUrl}`);
             
             let game = null;
             let userInstance = null;
             
+            // ========== WEBSOCKET CORRIGIDO ==========
             class Ws {
                 constructor() {
                     this.ws = new WebSocket(wsUrl);
@@ -122,9 +122,8 @@
                 }
                 
                 onClose() {
-                    console.log("⚠️ WebSocket desconectado, tentando reconectar em 5s...");
+                    console.log("⚠️ WebSocket desconectado, tentando reconectar...");
                     setTimeout(() => {
-                        console.log("🔄 Reconectando WebSocket...");
                         this.ws = new WebSocket(wsUrl);
                         this.ws.binaryType = "arraybuffer";
                         this.ws.onopen = this.onOpen.bind(this);
@@ -137,14 +136,12 @@
                 sendMessage(msg) {
                     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
                         this.ws.send(msg);
-                    } else {
-                        console.warn("⚠️ WebSocket não está aberto");
                     }
                 }
                 
                 onMessage(event) {
                     const msg = event.data.toString();
-                    console.log("📨 Recebido:", msg.substring(0, 100));
+                    console.log("📨", msg.substring(0, 100));
                     
                     const parts = msg.split(",  ;");
                     const cmd = parts[0].replaceAll(",", "");
@@ -161,11 +158,8 @@
                         case "sessions":
                             try {
                                 this.activeSessions = JSON.parse(parts[1] || "{}");
-                                console.log(`📋 Sessões ativas: ${Object.keys(this.activeSessions).length}`);
                                 this.updateSessionsDisplay();
-                            } catch(e) {
-                                console.error("Erro ao parsear sessões:", e);
-                            }
+                            } catch(e) {}
                             break;
                         default:
                             if (msg.includes("createsession")) {
@@ -177,23 +171,18 @@
                 updateSessionsDisplay() {
                     const sessionsDiv = document.getElementsByClassName("savedsessions")[0];
                     if (!sessionsDiv) return;
-                    
                     sessionsDiv.innerHTML = "";
                     Object.values(this.activeSessions).forEach((session) => {
                         const id = session.actualUserId;
                         const btn = document.createElement("button");
-                        btn.style.cssText = "background: #222; color: white; font-family: Hammersmith One, sans-serif; margin: 2px; padding: 4px 8px; cursor: pointer; border: 1px solid #444; border-radius: 3px;";
+                        btn.style.cssText = "background: #222; color: white; margin: 2px; padding: 4px 8px; cursor: pointer; border: 1px solid #444; border-radius: 3px;";
                         btn.textContent = `${session.sessionName || "Session"} [${id}]`;
-                        btn.onclick = () => {
-                            console.log(`🔍 Verificando sessão ${id}`);
-                            this.sendMessage(`verify,  ;${id}`);
-                        };
+                        btn.onclick = () => this.sendMessage(`verify,  ;${id}`);
                         sessionsDiv.appendChild(btn);
                     });
                 }
                 
                 createSession(sessionName, playerName, serverId, partyKey) {
-                    console.log(`🎮 Criando sessão: ${playerName} no servidor ${serverId}${partyKey ? ` com party ${partyKey}` : ""}`);
                     this.sendMessage(`createsession,  ;${sessionName},  ;${playerName},  ;${serverId},  ;${partyKey}`);
                 }
                 
@@ -202,34 +191,36 @@
                 }
             }
             
+            // ========== FUNÇÃO DO BOTÃO ==========
             function createSession() {
                 if (!userInstance) {
-                    alert("❌ Sistema não inicializado.");
+                    alert("Sistema não inicializado.");
                     return;
                 }
                 
                 const nameInput = document.getElementById("hud-intro-name");
                 const serverSelect = document.getElementById("serverSelect");
                 const partyInput = document.getElementById("partyKeyInput");
-                const name = nameInput ? nameInput.value.trim() : "Bot";
-                const server = serverSelect ? serverSelect.value : "v5006";
+                
+                const name = nameInput ? nameInput.value.trim() : "";
+                const server = serverSelect ? serverSelect.value : "v5001";
                 const partyKey = partyInput ? partyInput.value.trim() : "";
                 
-                if (!name || name.length < 2) {
-                    alert("❌ Digite um nickname válido (mínimo 2 caracteres)");
+                if (!name) {
+                    alert("Digite um nickname!");
                     return;
                 }
-
+                
                 if (!partyKey) {
-                    alert("❌ Digite a Party Share Key!");
+                    alert("Digite a Party Share Key!");
                     return;
                 }
                 
                 userInstance.createSession(name, name, server, partyKey);
-                console.log(`✅ Bot "${name}" enviado para servidor ${server}`);
+                console.log(`✅ Bot "${name}" enviado para servidor ${server} com party ${partyKey}`);
             }
             
-            // Inicializar
+            // ========== INICIALIZAÇÃO ==========
             userInstance = new Ws();
             window.user = userInstance;
             
@@ -242,69 +233,25 @@
                 };
             }
             
-            // Configurar Session Saver
-            const sessionDiv = document.querySelector(".session_saver");
-            if (sessionDiv) {
-                sessionDiv.innerHTML = `
-                    <h3>📋 Session Saver</h3>
-                    <hr>
-                    <div style="font-size: 12px; color: #aaa;">
-                        <p>✅ Bots conectados via WebSocket</p>
-                        <p>🔗 As sessões são salvas no servidor</p>
-                        <button id="refreshSessionsBtn" style="background: #333; color: white; border: 1px solid #555; padding: 4px 8px; margin-top: 8px; cursor: pointer;">🔄 Atualizar Sessões</button>
-                    </div>
-                    <div class="savedsessions" style="margin-top: 10px;"></div>
-                `;
-                
-                const refreshBtn = document.getElementById("refreshSessionsBtn");
-                if (refreshBtn) {
-                    refreshBtn.onclick = () => {
-                        if (userInstance) userInstance.getSessions();
-                    };
+            // Configurar o jogo
+            try {
+                if (typeof Game !== 'undefined') {
+                    game = new Game({ stage: "prod", servers: serverObj, userGroup: 2 });
+                    game.init(() => window.preloadGameTextures());
                 }
-            }
-            
-            // Aguardar o game ser carregado para configurar o script.js
-            console.log("🔄 Aguardando inicialização do jogo...");
-            
-            function loadAdditionalScripts() {
-                if (typeof game !== 'undefined' && game && game.network) {
-                    console.log("✅ Game detectado, carregando script.js...");
-                    clearInterval(checkInterval);
-                    
-                    // Corrigir a URL do WebSocket no script.js
-                    window.__BANSHEE_WS_URL__ = wsUrl;
-                    
-                    const script = document.createElement('script');
-                    script.src = '/script.js?v=loading-slower';
-                    script.onload = () => console.log("✅ script.js carregado");
-                    script.onerror = () => console.error("❌ Erro ao carregar script.js");
-                    document.body.appendChild(script);
-                    return true;
-                }
-                return false;
-            }
-            
-            const checkInterval = setInterval(() => {
-                if (loadAdditionalScripts()) clearInterval(checkInterval);
-            }, 100);
-            
-            setTimeout(() => {
-                if (typeof game === 'undefined') {
-                    console.warn("⚠️ Timeout: game não detectado");
-                    clearInterval(checkInterval);
-                }
-            }, 10000);
+            } catch(e) {}
             
             const playerCountElem = document.querySelector(".hud-intro-player-count");
             if (playerCountElem) {
-                playerCountElem.innerText = "🟢 BANSHEE Online";
+                playerCountElem.innerText = "BANSHEE Online";
             }
             
             console.log("✅ BANSHEE inicializado!");
-            console.log(`🔌 WebSocket URL: ${wsUrl}`);
         })();
     </script>
-    <!-- script.js será carregado dinamicamente quando game estiver pronto -->
+    
+    <!-- scripts originais mantidos -->
+    <script src="/script.js?v=loading-slower"></script>
+    <script src="/serverspots.js"></script>
 </body>
 </html>

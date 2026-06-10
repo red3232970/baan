@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>BANSHEE</title>
+    <title>BANSHEE - Session Manager</title>
     <link rel="icon" type="image/x-icon" href="/images/icons/favicon.ico">
     <link rel="stylesheet" type="text/css" href="https://fonts.googleapis.com/css?family=Hammersmith+One:400">
     <link rel="stylesheet" href="/app.css?v=menu-layer-fix">
@@ -17,14 +17,14 @@
                 <span class="hud-intro-credit"><span>Creator</span> L✡L✡L ヅ✓</span>
                 <span class="hud-intro-credit"><span>Designer</span> Sirr0m</span>
             </div>
-            <h2 class="hud-intro-player-count">Loading...</h2>
+            <h2 class="hud-intro-player-count">BANSHEE Ready</h2>
             <div class="hud-intro-main">
                 <div class="hud-intro-left">
                     <div class="session_saver"></div>
                 </div>
                 <div class="hud-intro-form">
-                    <input type="text" name="nickname" class="hud-intro-name" id="hud-intro-name" maxlength="29" placeholder="Your nickname...">
-                    <select class="hud-intro-server" name="server">
+                    <input type="text" name="nickname" class="hud-intro-name" id="hud-intro-name" maxlength="29" placeholder="Your nickname..." value="Bot">
+                    <select class="hud-intro-server" name="server" id="serverSelect">
                         <optgroup label="US East">
                             <option value="v1001">US East #1 - v1001</option>
                             <option value="v1002">US East #2 - v1002</option>
@@ -41,12 +41,12 @@
                             <option value="v2003">US West #3 - v2003</option>
                         </optgroup>
                         <optgroup label="Europe">
-                            <option value="v5001" selected>Europe #1 - v5001</option>
+                            <option value="v5001">Europe #1 - v5001</option>
                             <option value="v5002">Europe #2 - v5002</option>
                             <option value="v5003">Europe #3 - v5003</option>
                             <option value="v5004">Europe #4 - v5004</option>
                             <option value="v5005">Europe #5 - v5005</option>
-                            <option value="v5006">Europe #6 - v5006</option>
+                            <option value="v5006" selected>Europe #6 - v5006</option>
                             <option value="v5007">Europe #7 - v5007</option>
                         </optgroup>
                         <optgroup label="Asia">
@@ -57,8 +57,8 @@
                             <option value="v4002">Australia #2 - v4002</option>
                         </optgroup>
                     </select>
-                    <button type="submit" class="btn btn-green hud-intro-play">Play</button>
-                    <button type="submit" class="btn btn-green hud-intro-play" id="sendSessionBtn">Send Session</button>
+                    <input type="text" id="partyKeyInput" placeholder="Party Share Key (opcional)" style="width: 100%; margin-top: 10px; background: #222; color: white; border: 1px solid #444; padding: 8px; border-radius: 4px;">
+                    <button type="submit" class="btn btn-green" id="sendSessionBtn" style="margin-top: 10px;">🚀 Send Session</button>
                     <span class="hud-intro-error"></span>
                     <label for="hud-intro-disable-loading">
                         <input type="checkbox" id="hud-intro-disable-loading" name="disableLoadingScreen" class="hud-intro-canvas" value="true">
@@ -68,685 +68,288 @@
                 <div class="hud-intro-guide"></div>
             </div>
         </div>
-        <script src="/pixi.js"></script>
-        <script src="/app.js?v=menu-layer-fix"></script>
-        <script>
-            // ========== CORREÇÕES PRINCIPAIS ==========
+    </div>
+    
+    <script src="/pixi.js"></script>
+    <script src="/app.js?v=menu-layer-fix"></script>
+    <script>
+        // ============================================================
+        // BANSHEE - VERSÃO CORRIGIDA PARA RENDER.COM
+        // WebSocket na porta correta (sem porta explícita)
+        // ============================================================
+        
+        (function() {
+            console.log("🚀 BANSHEE iniciando...");
             
-            // 1. Forçar WebSocket seguro (WSS) quando estiver em HTTPS
-            const isHttps = window.location.protocol === 'https:';
-            const wsProtocol = isHttps ? 'wss://' : 'ws://';
-            
-            // 2. Configuração do servidor WebSocket (usando hostname atual)
-            const serverHostname = window.location.hostname;
-            const serverPort = 8090;
-            
+            // Configurações
             const defaultPassword = "=vo}+NpP,!zAsZT]NzXM1X,73Of'Jiff-K[o921DYFjoeF3ICv";
+            const WS_PATH = "/ws";  // Path do WebSocket no servidor
+            const PARTY_KEY = "ljegbelnqcljjozslswt";
+            const DEFAULT_SERVER = "v5006";
+            
             if (!localStorage.salt) {
                 localStorage.salt = defaultPassword;
             }
             
-            const sessionSaltStorageKey = "zombsSessionSalts";
-            const getSessionServerKey = () => {
-                const dropdown = document.getElementsByClassName("dropdown")[0];
-                return dropdown ? dropdown.value.toLowerCase() : "localhost";
-            }
+            // ========== WEBSOCKET CORRETO (SEM PORTA EXPLÍCITA) ==========
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${wsProtocol}//${window.location.host}${WS_PATH}`;
             
-            const getStoredSessionSalts = () => {
-                try {
-                    return JSON.parse(localStorage[sessionSaltStorageKey] || "{}") || {};
-                } catch {
-                    return {};
-                }
-            }
+            console.log(`🔌 Conectando WebSocket em: ${wsUrl}`);
             
-            const setStoredSessionSalt = (key, password) => {
-                const salts = getStoredSessionSalts();
-                salts[key] = password;
-                localStorage[sessionSaltStorageKey] = JSON.stringify(salts);
-                if (key === "localhost") {
-                    localStorage.salt = password;
-                }
-            }
-            
-            const getSessionSalt = (key = getSessionServerKey()) => {
-                const salts = getStoredSessionSalts();
-                if (salts[key]) return salts[key];
-                return key === "localhost" ? defaultPassword : (localStorage.salt || defaultPassword);
-            }
-            
-            const notAllowedCharsInHTML = new Map([["<", "&lt;"], [">", "&gt;"]]);
-            const Sanitize = (e) => {
-                let text = "";
-                for (let i = 0; i < e.length; i++) {
-                    if (notAllowedCharsInHTML.has(e[i])) {
-                        text += notAllowedCharsInHTML.get(e[i]);
-                    } else {
-                        text += e[i];
-                    }
-                }
-                return text;
-            }
-            
-            const serverArr = [["v1001", "45.76.4.28", "zombs-2d4c041c-0.eggs.gg"], ["v1002", "45.77.203.204", "zombs-2d4dcbcc-0.eggs.gg"], ["v1003", "45.77.200.150", "zombs-2d4dc896-0.eggs.gg"], ["v1004", "104.156.225.133", "zombs-689ce185-0.eggs.gg"], ["v1005", "45.77.149.224", "zombs-2d4d95e0-0.eggs.gg"], ["v1006", "173.199.123.77", "zombs-adc77b4d-0.eggs.gg"], ["v1007", "45.76.166.32", "zombs-2d4ca620-0.eggs.gg"], ["v1008", "149.28.58.193", "zombs-951c3ac1-0.eggs.gg"], ["v2001", "149.28.87.132", "zombs-951c5784-0.eggs.gg"], ["v2002", "45.76.68.210", "zombs-2d4c44d2-0.eggs.gg"], ["v2003", "108.61.219.244", "zombs-6c3ddbf4-0.eggs.gg"], ["v5001", "80.240.19.5", "zombs-50f01305-0.eggs.gg"], ["v5002", "45.77.53.65", "zombs-2d4d3541-0.eggs.gg"], ["v5003", "95.179.167.12", "zombs-5fb3a70c-0.eggs.gg"], ["v5004", "95.179.163.97", "zombs-5fb3a361-0.eggs.gg"], ["v5005", "136.244.83.44", "zombs-88f4532c-0.eggs.gg"], ["v5006", "45.32.158.210", "zombs-2d209ed2-0.eggs.gg"], ["v5007", "95.179.169.17", "zombs-5fb3a911-0.eggs.gg"], ["v3001", "45.77.249.75", "zombs-2d4df94b-0.eggs.gg"], ["v4001", "149.28.182.161", "zombs-951cb6a1-0.eggs.gg"], ["v4002", "149.28.165.199", "zombs-951ca5c7-0.eggs.gg"]].map((e) => ({ id: e[0], hostname: e[1], host: e[2] }));
-            
-            const serverObj = {};
-            serverArr.forEach((e) => {
-                serverObj[e.id] = { id: e.id, hostname: e.hostname, host: e.host, port: 443, fallbackPort: 443 };
-            });
-            
-            // ========== CLASSES E FUNÇÕES AUXILIARES ==========
-            
-            const bansheeLoadingScreenStorageKey = "disableLoadingScreen";
-            window.isBansheeSessionLoaderDisabled = () => {
-                try {
-                    return localStorage.getItem(bansheeLoadingScreenStorageKey) === "true";
-                } catch {
-                    return false;
-                }
-            }
-            
-            window.setBansheeSessionLoaderDisabled = (disabled) => {
-                try {
-                    localStorage.setItem(bansheeLoadingScreenStorageKey, disabled ? "true" : "false");
-                } catch { };
-                if (disabled && window.hideBansheeSessionLoader) window.hideBansheeSessionLoader();
-            }
-            
-            window.showBansheeSessionLoader = (options = {}) => {
-                const loader = document.getElementById("banshee-session-loader");
-                if (!loader) return;
-                clearTimeout(window.bansheeSessionLoaderTimer);
-                clearTimeout(window.bansheeSessionLoaderResetTimer);
-                clearTimeout(window.bansheeSessionLoaderFailsafeTimer);
-                if (window.isBansheeSessionLoaderDisabled()) {
-                    loader.classList.remove("is-active", "is-leaving");
-                    return;
-                }
-                loader.classList.remove("is-active", "is-leaving");
-                void loader.offsetWidth;
-                loader.dataset.startedAt = Date.now();
-                loader.dataset.minDuration = options.minDuration || 1200;
-                loader.classList.add("is-active");
-                window.bansheeSessionLoaderFailsafeTimer = setTimeout(() => {
-                    if (window.hideBansheeSessionLoader) window.hideBansheeSessionLoader();
-                }, 4000);
-            }
-            
-            window.hideBansheeSessionLoader = () => {
-                const loader = document.getElementById("banshee-session-loader");
-                if (!loader) return;
-                clearTimeout(window.bansheeSessionLoaderFailsafeTimer);
-                if (window.isBansheeSessionLoaderDisabled()) {
-                    clearTimeout(window.bansheeSessionLoaderTimer);
-                    clearTimeout(window.bansheeSessionLoaderResetTimer);
-                    loader.classList.remove("is-active", "is-leaving");
-                    return;
-                }
-                const startedAt = parseInt(loader.dataset.startedAt || Date.now(), 10);
-                const minDuration = parseInt(loader.dataset.minDuration || 2000, 10);
-                const delay = Math.max(0, minDuration - (Date.now() - startedAt));
-                clearTimeout(window.bansheeSessionLoaderTimer);
-                window.bansheeSessionLoaderTimer = setTimeout(() => {
-                    loader.classList.remove("is-active");
-                    loader.classList.add("is-leaving");
-                    clearTimeout(window.bansheeSessionLoaderResetTimer);
-                    if (window.isPlayerDead) {
-                        window.isPlayerDead = false;
-                        if (game && game.ui && game.ui.components && game.ui.components.Respawn) {
-                            game.ui.components.Respawn.show();
-                        }
-                    }
-                    window.bansheeSessionLoaderResetTimer = setTimeout(() => {
-                        loader.classList.remove("is-leaving");
-                    }, 600);
-                }, delay);
-            }
-            
-            window.texturePreloadState = { loaded: 0, total: 0, done: false };
-            window.preloadGameTextures = async (force = false) => {
-                if (!window.PIXI) return;
-                if (!force && localStorage.texturePreloadEnabled !== "true") {
-                    window.texturePreloadState.done = true;
-                    window.texturePreloadState.disabled = true;
-                    return;
-                }
-                if (window.gameTexturePreloadPromise) {
-                    return window.gameTexturePreloadPromise;
-                }
-                const textures = (window.textures ||= new Map());
-                const idle = () => new Promise((resolve) => {
-                    if ("requestIdleCallback" in window) {
-                        requestIdleCallback(resolve, { timeout: 250 });
-                    } else {
-                        setTimeout(resolve, 0);
-                    }
-                });
-                const waitForTexture = (texture) => new Promise((resolve) => {
-                    const base = texture?.baseTexture;
-                    if (!base || base.valid || base.hasLoaded) {
-                        resolve();
-                        return;
-                    }
-                    let finished = false;
-                    const done = () => {
-                        if (finished) return;
-                        finished = true;
-                        base.off?.("loaded", done);
-                        base.off?.("error", done);
-                        resolve();
-                    };
-                    base.once?.("loaded", done);
-                    base.once?.("error", done);
-                    setTimeout(done, 4000);
-                });
-                window.gameTexturePreloadPromise = fetch("/manifest.json").then((r) => (r.ok ? r.json() : [])).then(async (assets) => {
-                    const images = Array.isArray(assets) ? assets.filter((a) => typeof a === "string" && /\.(png|svg|ico)$/i.test(a)) : [];
-                    window.texturePreloadState.total = images.length;
-                    let loaded = 0;
-                    let index = 0;
-                    const worker = async () => {
-                        while (index < images.length) {
-                            const asset = images[index++];
-                            let texture = textures.get(asset);
-                            if (!texture) {
-                                texture = PIXI.Texture.from(asset);
-                                textures.set(asset, texture);
-                            }
-                            await waitForTexture(texture);
-                            loaded++;
-                            window.texturePreloadState.loaded = loaded;
-                            if ((loaded & 15) === 0) {
-                                await idle();
-                            }
-                        }
-                    }
-                    await Promise.all(Array.from({ length: 1 }, () => worker()));
-                    window.texturePreloadState.done = true;
-                }).catch(() => {
-                    window.texturePreloadState.done = true;
-                });
-                return window.gameTexturePreloadPromise;
-            }
-            
-            // Placeholder para o jogo (será inicializado depois)
             let game = null;
-            
-            // ========== WEBSOCKET CORRIGIDO ==========
+            let userInstance = null;
             
             class Ws {
-                constructor(type) {
-                    // CORREÇÃO: Usar protocolo seguro baseado na página atual
-                    const dropdown = document.getElementsByClassName("dropdown")[0];
-                    const serverKey = dropdown ? dropdown.value.toLowerCase() : "localhost";
-                    const wsUrl = serverKey === "localhost" 
-                        ? `${wsProtocol}${serverHostname}:${serverPort}`
-                        : `${wsProtocol}${serverHostname}:${serverPort}`;
+                constructor() {
                     this.ws = new WebSocket(wsUrl);
                     this.ws.binaryType = "arraybuffer";
                     this.userId = null;
+                    this.activeSessions = {};
                     this.ws.onopen = this.onOpen.bind(this);
+                    this.ws.onmessage = this.onMessage.bind(this);
+                    this.ws.onclose = this.onClose.bind(this);
+                    this.ws.onerror = this.onError.bind(this);
                 }
                 
-                decode(e) {
-                    return new TextDecoder().decode(e);
-                }
-                
-                sendMessage(m) {
-                    if (this.ws && this.ws.readyState === 1) {
-                        this.ws.send(m);
-                    }
+                onError(err) {
+                    console.error("❌ WebSocket erro:", err);
                 }
                 
                 onOpen() {
+                    console.log("✅ WebSocket conectado!");
                     this.sendMessage(`salt,  ;${localStorage.salt}`);
                 }
-            }
-            
-            class User extends Ws {
-                constructor() {
-                    super("user");
-                    this.activeSessions = {};
-                    this.ws.onmessage = this.onMessage.bind(this);
-                    this.ws.onclose = this.onClose.bind(this);
+                
+                onClose() {
+                    console.log("⚠️ WebSocket desconectado, tentando reconectar em 5s...");
+                    setTimeout(() => {
+                        console.log("🔄 Reconectando WebSocket...");
+                        this.ws = new WebSocket(wsUrl);
+                        this.ws.binaryType = "arraybuffer";
+                        this.ws.onopen = this.onOpen.bind(this);
+                        this.ws.onmessage = this.onMessage.bind(this);
+                        this.ws.onclose = this.onClose.bind(this);
+                        this.ws.onerror = this.onError.bind(this);
+                    }, 5000);
                 }
                 
-                onMessage(m) {
-                    try {
-                        const x = new Uint8Array(m.data);
-                        if (x[0] === 0 || x[0] === 9) {
-                            if (game && game.network && game.network.codec) {
-                                const obj = game.network.codec.decode(x);
-                                if (obj.opcode === 0 || obj.opcode === 9) {
-                                    if (window.onMessage2) window.onMessage2(obj);
-                                }
+                sendMessage(msg) {
+                    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                        this.ws.send(msg);
+                    } else {
+                        console.warn("⚠️ WebSocket não está aberto, mensagem não enviada:", msg.substring(0, 50));
+                    }
+                }
+                
+                onMessage(event) {
+                    const msg = event.data.toString();
+                    console.log("📨 Recebido:", msg.substring(0, 100));
+                    
+                    const parts = msg.split(",  ;");
+                    const cmd = parts[0].replaceAll(",", "");
+                    
+                    switch(cmd) {
+                        case "accesssuccess":
+                            this.sendMessage("user");
+                            this.sendMessage("getsessionstats");
+                            break;
+                        case "id":
+                            this.userId = parseInt(parts[1]);
+                            console.log(`🆔 User ID: ${this.userId}`);
+                            break;
+                        case "sessions":
+                            try {
+                                this.activeSessions = JSON.parse(parts[1] || "{}");
+                                console.log(`📋 Sessões ativas: ${Object.keys(this.activeSessions).length}`);
+                                this.updateSessionsDisplay();
+                            } catch(e) {
+                                console.error("Erro ao parsear sessões:", e);
                             }
-                            return;
-                        }
-                        const msg = this.decode(m.data);
-                        if (msg) {
-                            const cmd = msg.split(" ")[0].replaceAll(",", "");
-                            switch (cmd) {
-                                case "accesssuccess":
-                                    this.sendMessage("user");
-                                    this.sendMessage("getsessionstats");
-                                    break;
-                                case "id":
-                                    this.userId = parseInt(msg.split(",  ;")[1]);
-                                    break;
-                                case "sessions":
-                                    const args2 = msg.split(",  ;");
-                                    this.activeSessions = JSON.parse(args2[1] || "{}");
-                                    const sessionsDiv = document.getElementsByClassName("savedsessions")[0];
-                                    if (sessionsDiv) {
-                                        sessionsDiv.innerHTML = "";
-                                        Object.values(this.activeSessions).sort((a, b) => a.sessionUserId - b.sessionUserId).forEach((e) => {
-                                            const id = parseInt(e.actualUserId);
-                                            sessionsDiv.innerHTML += `<button style="background: #222222; color: white; font-family: Hammersmith One, sans-serif" onclick="window.user.verify(${id})">${e.sessionName ? Sanitize(e.sessionName) : "Session"} [${id} | ${parseInt(e.sessionUserId)}]</button>`;
-                                        });
-                                    }
-                                    break;
-                                case "prfpsks":
-                                    // Ignorar, apenas manter conexão
-                                    break;
-                                default:
-                                    console.log("Mensagem não tratada:", cmd, msg.substring(0, 100));
+                            break;
+                        case "prfpsks":
+                            // Lista de chaves, ignorar
+                            break;
+                        default:
+                            if (cmd === "sessionstats" || cmd === "sessionstates") {
+                                // Stats, ignorar
+                            } else if (msg.includes("createsession") || msg.includes("verify")) {
+                                console.log("✅ Comando processado:", cmd);
                             }
-                        }
-                    } catch(e) {
-                        console.error("Erro no onMessage:", e);
                     }
                 }
                 
-                verify(id) {
-                    id = parseInt(id);
-                    if (!Number.isFinite(id)) return;
-                    this.sendMessage(`verify,  ;${id}`);
-                    this.connectedToId = id;
-                    setTimeout(() => this.sendMessage("getsessionstats"), 300);
+                updateSessionsDisplay() {
+                    const sessionsDiv = document.getElementsByClassName("savedsessions")[0];
+                    if (!sessionsDiv) return;
+                    
+                    sessionsDiv.innerHTML = "";
+                    Object.values(this.activeSessions).forEach((session) => {
+                        const id = session.actualUserId;
+                        const btn = document.createElement("button");
+                        btn.style.cssText = "background: #222; color: white; font-family: Hammersmith One, sans-serif; margin: 2px; padding: 4px 8px; cursor: pointer; border: 1px solid #444; border-radius: 3px;";
+                        btn.textContent = `${session.sessionName || "Session"} [${id}]`;
+                        btn.onclick = () => {
+                            console.log(`🔍 Verificando sessão ${id}`);
+                            this.sendMessage(`verify,  ;${id}`);
+                        };
+                        sessionsDiv.appendChild(btn);
+                    });
                 }
                 
-                sendPacket(opcode, data) {
-                    if (!game || !game.network || !game.network.codec) return;
-                    const buffer = new Uint8Array(game.network.codec.encode(opcode, data));
-                    const arr = [1];
-                    for (let i = 0; i < buffer.length; i++) {
-                        arr.push(buffer[i]);
-                    }
-                    if (this.ws.readyState === 1) {
-                        this.ws.send(new Uint8Array(arr));
-                    }
-                }
-                
-                sendBuffer(buffer) {
-                    const arr = [2];
-                    for (let i = 0; i < buffer.length; i++) {
-                        arr.push(buffer[i]);
-                    }
-                    if (this.ws.readyState === 1) {
-                        this.ws.send(new Uint8Array(arr));
-                    }
-                }
-                
-                createSession(sessionname, name, sid, psk) {
-                    this.sendMessage(`createsession,  ;${sessionname},  ;${name},  ;${sid},  ;${psk}`);
+                createSession(sessionName, playerName, serverId, partyKey) {
+                    console.log(`🎮 Criando sessão: ${playerName} no servidor ${serverId}${partyKey ? ` com party ${partyKey}` : ""}`);
+                    this.sendMessage(`createsession,  ;${sessionName},  ;${playerName},  ;${serverId},  ;${partyKey}`);
                 }
                 
                 getSessions() {
                     this.sendMessage("getsessions");
                 }
-                
-                disconnect() {
-                    if (this.ws) this.ws.close();
+            }
+            
+            // ========== FUNÇÕES DA INTERFACE ==========
+            
+            function createSession() {
+                if (!userInstance) {
+                    alert("❌ Sistema não inicializado. Aguarde e tente novamente.");
+                    return;
                 }
                 
-                closeSession(id) {
-                    this.sendMessage("closesession,  ;" + id);
+                const nameInput = document.getElementById("hud-intro-name");
+                const serverSelect = document.getElementById("serverSelect");
+                const partyInput = document.getElementById("partyKeyInput");
+                
+                const name = nameInput ? nameInput.value.trim() : "Bot";
+                const server = serverSelect ? serverSelect.value : DEFAULT_SERVER;
+                const partyKey = partyInput ? partyInput.value.trim() : PARTY_KEY;
+                
+                if (!name || name.length < 2) {
+                    alert("❌ Digite um nickname válido (mínimo 2 caracteres)");
+                    return;
                 }
                 
-                reconnect() {
-                    this.disconnect();
+                userInstance.createSession(name, name, server, partyKey);
+                console.log(`✅ Bot "${name}" enviado para servidor ${server}`);
+                
+                // Feedback visual
+                const btn = document.getElementById("sendSessionBtn");
+                if (btn) {
+                    const originalText = btn.textContent;
+                    btn.textContent = "✅ Enviado!";
+                    setTimeout(() => { btn.textContent = originalText; }, 2000);
+                }
+            }
+            
+            function createMultipleBots() {
+                const count = parseInt(document.getElementById("multiCount")?.value || "5");
+                const baseName = document.getElementById("multiBaseName")?.value || "FarmBot";
+                const server = document.getElementById("serverSelect")?.value || DEFAULT_SERVER;
+                const partyKey = document.getElementById("partyKeyInput")?.value || PARTY_KEY;
+                
+                if (count > 50) {
+                    alert("⚠️ Limite de 50 bots por vez!");
+                    return;
+                }
+                
+                for (let i = 1; i <= count; i++) {
                     setTimeout(() => {
-                        this.ws = new User().ws;
-                        this.ws.onopen = this.onOpen.bind(this);
-                        this.ws.onmessage = this.onMessage.bind(this);
-                        this.ws.onclose = this.onClose.bind(this);
-                    }, 1000);
+                        const name = `${baseName}${i}`;
+                        userInstance.createSession(name, name, server, partyKey);
+                        console.log(`🎮 Bot ${i}/${count}: ${name}`);
+                    }, i * 300);
                 }
                 
-                onClose() {
-                    if (this.reconnecting) {
-                        this.reconnecting = false;
-                        return;
-                    }
-                    if (window.hideBansheeSessionLoader) window.hideBansheeSessionLoader();
-                    setTimeout(() => {
-                        this.reconnect();
-                    }, 1000);
-                }
-                
-                changePassword(password) {
-                    this.sendMessage(`changehasaccess,  ;${password}`);
-                }
-            }
-            
-            // ========== FUNÇÕES GLOBAIS ==========
-            
-            window.user = null;
-            window.ban = window.ban || {};
-            window.ban.players = 0;
-            window.socketsByUid = {};
-            
-            const sendSession = () => {
-                if (!window.user) return;
-                const sessionNameElem = document.getElementsByClassName("sessionsessionname")[0];
-                const nameElem = document.getElementsByClassName("sessionname")[0];
-                const sidElem = document.getElementsByClassName("sessionsid")[0];
-                const pskElem = document.getElementsByClassName("sessionpsk")[0];
-                if (sessionNameElem && nameElem && sidElem && pskElem) {
-                    window.user.createSession(
-                        sessionNameElem.value, 
-                        nameElem.value, 
-                        sidElem.value, 
-                        pskElem.value
-                    );
-                }
-            }
-            
-            const enableAutoBreakIn = () => {
-                if (!window.user) return;
-                const sidElem = document.getElementsByClassName("sessionsid")[0];
-                const sessionNameElem = document.getElementsByClassName("sessionsessionname")[0];
-                const nameElem = document.getElementsByClassName("sessionname")[0];
-                const pskElem = document.getElementsByClassName("sessionpsk")[0];
-                if (sidElem) {
-                    window.user.sendMessage(`eabi,  ;${sidElem.value},  ;${sessionNameElem ? sessionNameElem.value : ""},  ;${nameElem ? nameElem.value : ""},  ;${pskElem ? pskElem.value : ""}`);
-                    sendSession();
-                }
-            }
-            
-            const disableAutoBreakIn = () => {
-                if (!window.user) return;
-                const sidElem = document.getElementsByClassName("sessionsid")[0];
-                if (sidElem) window.user.sendMessage(`dabi,  ;${sidElem.value}`);
-            }
-            
-            const enableAutoRefiller = () => {
-                if (!window.user) return;
-                const sidElem = document.getElementsByClassName("sessionsid")[0];
-                if (sidElem) window.user.sendMessage(`esrf,  ;${sidElem.value}`);
-            }
-            
-            const disableAutoRefiller = () => {
-                if (!window.user) return;
-                const sidElem = document.getElementsByClassName("sessionsid")[0];
-                if (sidElem) window.user.sendMessage(`dsrf,  ;${sidElem.value}`);
-            }
-            
-            const enableAutoReconnect = () => {
-                if (!window.user) return;
-                const sidElem = document.getElementsByClassName("sessionsid")[0];
-                if (sidElem) window.user.sendMessage(`earc,  ;${sidElem.value}`);
-            }
-            
-            const disableAutoReconnect = () => {
-                if (!window.user) return;
-                const sidElem = document.getElementsByClassName("sessionsid")[0];
-                if (sidElem) window.user.sendMessage(`darc,  ;${sidElem.value}`);
-            }
-            
-            const enableAutoFarm = () => {
-                if (!window.user) return;
-                const sidElem = document.getElementsByClassName("sessionsid")[0];
-                if (sidElem) window.user.sendMessage(`eafr,  ;${sidElem.value}`);
-            }
-            
-            const disableAutoFarm = () => {
-                if (!window.user) return;
-                const sidElem = document.getElementsByClassName("sessionsid")[0];
-                if (sidElem) window.user.sendMessage(`dafr,  ;${sidElem.value}`);
-            }
-            
-            const closeSession = () => {
-                if (!window.user) return;
-                const inputElem = document.getElementsByClassName("closesessioninput")[0];
-                if (inputElem) {
-                    const id = parseInt(inputElem.value);
-                    if (window.user.activeSessions[id]) {
-                        window.user.closeSession(inputElem.value);
-                    }
-                }
-            }
-            
-            const changesessionname = () => {
-                if (!window.user) return;
-                const idElem = document.getElementsByClassName("changesessionnameinput")[0];
-                const nameElem = document.getElementsByClassName("changesessionnameinput2")[0];
-                if (idElem && nameElem) {
-                    window.user.sendMessage(`changesessionname,  ;${idElem.value},  ;${nameElem.value}`);
-                }
-            }
-            
-            const changesessionid = () => {
-                if (!window.user) return;
-                const idElem = document.getElementsByClassName("changesessionidinput")[0];
-                const newIdElem = document.getElementsByClassName("changesessionidinput2")[0];
-                if (idElem && newIdElem) {
-                    window.user.sendMessage(`changesessionid,  ;${idElem.value},  ;${newIdElem.value}`);
-                }
-            }
-            
-            const enablePartyRefiller = () => {
-                if (!window.user) return;
-                const sidElem = document.getElementsByClassName("prfsid")[0];
-                if (sidElem) window.user.sendMessage(`eafp,  ;${sidElem.value}`);
-            }
-            
-            const disablePartyRefiller = () => {
-                if (!window.user) return;
-                const sidElem = document.getElementsByClassName("prfsid")[0];
-                if (sidElem) window.user.sendMessage(`dafp,  ;${sidElem.value}`);
-            }
-            
-            const addPartyRefillerKey = () => {
-                if (!window.user) return;
-                const sidElem = document.getElementsByClassName("prfsid")[0];
-                const pskElem = document.getElementsByClassName("prfpsk")[0];
-                if (sidElem && pskElem) {
-                    window.user.sendMessage(`addafpsk,  ;${pskElem.value},  ;${sidElem.value}`);
-                    changeServer();
-                }
-            }
-            
-            const removePartyRefillerKey = () => {
-                if (!window.user) return;
-                const sidElem = document.getElementsByClassName("prfsid")[0];
-                const pskElem = document.getElementsByClassName("prfpsk")[0];
-                if (sidElem && pskElem) {
-                    window.user.sendMessage(`removeafpsk,  ;${pskElem.value},  ;${sidElem.value}`);
-                    changeServer();
-                }
-            }
-            
-            const changePassword = () => {
-                if (!window.user) return;
-                const passwordElem = document.getElementsByClassName("changepasswordinput")[0];
-                if (passwordElem && passwordElem.value.length > 0) {
-                    localStorage.salt = passwordElem.value;
-                    window.user.changePassword(localStorage.salt);
-                }
-            }
-            
-            const resetPassword = () => {
-                if (!window.user) return;
-                localStorage.salt = defaultPassword;
-                window.user.changePassword(localStorage.salt);
-            }
-            
-            const changeServer = () => {
-                if (!window.user || !window.user.ws) return;
-                const currentUrl = window.user.ws.url;
-                const dropdown = document.getElementsByClassName("dropdown")[0];
-                if (dropdown) {
-                    const newKey = dropdown.value.toLowerCase();
-                    const newUrl = `${wsProtocol}${serverHostname}:${serverPort}`;
-                    if (newUrl !== currentUrl) {
-                        window.user.reconnect();
-                    }
-                }
+                alert(`🚀 Criando ${count} bots: ${baseName}1 até ${baseName}${count}`);
             }
             
             // ========== INICIALIZAÇÃO ==========
             
-            // Criar a instância do User PRIMEIRO
-            window.user = new User();
+            // Criar instância do WebSocket
+            userInstance = new Ws();
+            window.user = userInstance;
             
-            // Configurar o botão Send Session CORRETAMENTE (após o user existir)
+            // Configurar botão Send Session
             const sendBtn = document.getElementById("sendSessionBtn");
             if (sendBtn) {
                 sendBtn.onclick = (e) => {
                     e.preventDefault();
-                    if (!window.user) {
-                        console.error("User não inicializado ainda");
-                        alert("Sistema inicializando, aguarde um momento...");
-                        return;
-                    }
-                    const server = document.getElementsByClassName("hud-intro-server")[0].value;
-                    const name = document.getElementsByClassName("hud-intro-name")[0].value;
-                    if (!name || name.trim() === "") {
-                        alert("Digite um nickname!");
-                        return;
-                    }
-                    const hash = window.location.hash;
-                    let psk = "";
-                    if (hash && hash.includes("/")) {
-                        const parts = hash.split("/");
-                        if (parts.length >= 4) {
-                            psk = parts[3] || "";
-                        } else if (hash.length > 20) {
-                            psk = hash.slice(-20);
-                        }
-                    }
-                    window.user.createSession(server, name, server, psk);
-                    console.log(`✅ Criando sessão: ${name} no servidor ${server}`);
-                    if (psk) console.log(`🔑 Party key: ${psk}`);
+                    createSession();
                 };
-            } else {
-                // Fallback - tentar pelo índice
-                const btns = document.getElementsByClassName("hud-intro-play");
-                if (btns.length >= 2) {
-                    btns[1].onclick = (e) => {
-                        e.preventDefault();
-                        if (!window.user) {
-                            console.error("User não inicializado");
-                            return;
-                        }
-                        const server = document.getElementsByClassName("hud-intro-server")[0].value;
-                        const name = document.getElementsByClassName("hud-intro-name")[0].value;
-                        if (!name || name.trim() === "") {
-                            alert("Digite um nickname!");
-                            return;
-                        }
-                        const hash = window.location.hash;
-                        let psk = "";
-                        if (hash && hash.length > 20) psk = hash.slice(-20);
-                        window.user.createSession(server, name, server, psk);
-                        console.log(`✅ Criando sessão: ${name}`);
+            }
+            
+            // Adicionar seção de múltiplos bots
+            const formDiv = document.querySelector(".hud-intro-form");
+            if (formDiv) {
+                const multiHtml = `
+                    <hr style="border-color: #444; margin: 15px 0;">
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+                        <input type="number" id="multiCount" placeholder="Qtd" value="5" style="background: #222; color: white; border: 1px solid #444; padding: 8px; width: 70px; border-radius: 4px;">
+                        <input type="text" id="multiBaseName" placeholder="Nome base" value="FarmBot" style="background: #222; color: white; border: 1px solid #444; padding: 8px; width: 120px; border-radius: 4px;">
+                        <button id="multiBotBtn" style="background: #2a6e2a; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">🎮 Criar Múltiplos</button>
+                    </div>
+                `;
+                formDiv.insertAdjacentHTML('beforeend', multiHtml);
+                
+                const multiBtn = document.getElementById("multiBotBtn");
+                if (multiBtn) {
+                    multiBtn.onclick = createMultipleBots;
+                }
+            }
+            
+            // Configurar Session Saver
+            const sessionDiv = document.querySelector(".session_saver");
+            if (sessionDiv) {
+                sessionDiv.innerHTML = `
+                    <h3>📋 Session Saver</h3>
+                    <hr>
+                    <div style="font-size: 12px; color: #aaa;">
+                        <p>✅ Bots conectados via WebSocket</p>
+                        <p>🔗 As sessões são salvas no servidor</p>
+                        <p>🎯 Party atual: <code style="background:#000;padding:2px 4px;">${PARTY_KEY.substring(0, 15)}...</code></p>
+                        <button id="refreshSessionsBtn" style="background: #333; color: white; border: 1px solid #555; padding: 4px 8px; margin-top: 8px; cursor: pointer;">🔄 Atualizar Sessões</button>
+                    </div>
+                    <div class="savedsessions" style="margin-top: 10px;"></div>
+                `;
+                
+                const refreshBtn = document.getElementById("refreshSessionsBtn");
+                if (refreshBtn) {
+                    refreshBtn.onclick = () => {
+                        if (userInstance) userInstance.getSessions();
                     };
                 }
             }
             
-            // Inicializar o jogo (simulado)
-            try {
-                if (typeof Game !== 'undefined') {
-                    game = new Game({ stage: "prod", servers: serverObj, userGroup: 2 });
-                    game.init(() => {
-                        window.preloadGameTextures();
-                        if (game.debug) game.debug.init();
-                    });
-                } else {
-                    console.log("Game não definido, usando modo simplificado");
-                }
-            } catch(e) {
-                console.warn("Erro ao inicializar Game:", e.message);
+            // Guia de ajuda
+            const guideDiv = document.querySelector(".hud-intro-guide");
+            if (guideDiv) {
+                guideDiv.innerHTML = `
+                    <div style="text-align: center; padding: 10px;">
+                        <hr>
+                        <h4>📖 Como usar:</h4>
+                        <ol style="text-align: left; font-size: 12px;">
+                            <li>Digite um <strong>nickname</strong> para seu bot</li>
+                            <li>Escolha o <strong>servidor</strong> (recomendado: Europe #6)</li>
+                            <li>Se quiser party, cole o <strong>Party Share Key</strong></li>
+                            <li>Clique em <strong>"Send Session"</strong> para criar 1 bot</li>
+                            <li>Ou use <strong>"Criar Múltiplos"</strong> para vários de uma vez</li>
+                        </ol>
+                        <hr>
+                        <p style="font-size: 11px; color: #666;">🔒 BANSHEE - WebSocket corrigido para Render.com</p>
+                    </div>
+                `;
             }
             
-            // Configurar Scanner API
-            class ScannerAPI {
-                constructor() {
-                    this.baseUrl = "http://95.111.234.133/api/";
-                    this.searchOptions = {
-                        players: new Set(["uid", "serverId", "name", "partyId"]),
-                        stashes: new Set(["serverId", "partyId", "tier", "uid"]),
-                        servers: new Set(["serverId", "population"])
-                    };
-                    this.searchTypes = new Set(["players", "stashes", "servers"]);
-                    this.leaderboards = new Map();
-                }
-                
-                async fetchApiData(type, parameters = {}) {
-                    if (!this.searchTypes.has(type)) return [];
-                    try {
-                        let url = this.baseUrl + type;
-                        if (Object.keys(parameters).length) {
-                            const params = new URLSearchParams();
-                            for (let k in parameters) {
-                                if (this.searchOptions[type].has(k)) params.append(k, parameters[k]);
-                            }
-                            url += "?" + params.toString();
-                        }
-                        const response = await fetch(url);
-                        return response.json();
-                    } catch {
-                        return [];
-                    }
-                }
-                
-                getServers() {
-                    return this.fetchApiData("servers");
-                }
+            // Atualizar contador de jogadores
+            const playerCountElem = document.querySelector(".hud-intro-player-count");
+            if (playerCountElem) {
+                playerCountElem.innerText = "🟢 BANSHEE Online - Conectado via WebSocket";
             }
             
-            const scanner = new ScannerAPI();
-            
-            // Carregar contagem de jogadores
-            scanner.getServers().then((lbs) => {
-                if (lbs && lbs.length) {
-                    const total = lbs.reduce((acc, s) => acc + (s.population || 0), 0);
-                    const playerCountElem = document.getElementsByClassName("hud-intro-player-count")[0];
-                    if (playerCountElem) {
-                        playerCountElem.innerText = `Players in game: ${total}/840`;
-                    }
-                }
-            });
-            
-            // Função para elementos do chat
-            window.getElement = (id) => document.getElementsByClassName(id);
-            
-            // Expor funções globalmente
-            window.sendSession = sendSession;
-            window.enableAutoBreakIn = enableAutoBreakIn;
-            window.disableAutoBreakIn = disableAutoBreakIn;
-            window.enableAutoRefiller = enableAutoRefiller;
-            window.disableAutoRefiller = disableAutoRefiller;
-            window.enableAutoReconnect = enableAutoReconnect;
-            window.disableAutoReconnect = disableAutoReconnect;
-            window.enableAutoFarm = enableAutoFarm;
-            window.disableAutoFarm = disableAutoFarm;
-            window.closeSession = closeSession;
-            window.changesessionname = changesessionname;
-            window.changesessionid = changesessionid;
-            window.enablePartyRefiller = enablePartyRefiller;
-            window.disablePartyRefiller = disablePartyRefiller;
-            window.addPartyRefillerKey = addPartyRefillerKey;
-            window.removePartyRefillerKey = removePartyRefillerKey;
-            window.changePassword = changePassword;
-            window.resetPassword = resetPassword;
-            window.changeServer = changeServer;
-            
-            console.log("✅ BANSHEE inicializado com correções!");
-            console.log(`🔌 WebSocket: ${wsProtocol}${serverHostname}:${serverPort}`);
-        </script>
+            console.log("✅ BANSHEE inicializado com WebSocket corrigido!");
+            console.log(`🔌 WebSocket URL: ${wsUrl}`);
+            console.log(`💡 Party Key padrão: ${PARTY_KEY}`);
+        })();
+    </script>
     <script src="/script.js?v=loading-slower"></script>
     <script src="/serverspots.js"></script>
 </body>

@@ -57,6 +57,7 @@
                             <option value="v4002">Australia #2 - v4002</option>
                         </optgroup>
                     </select>
+                    <!-- CAMPO DE PARTY KEY ADICIONADO -->
                     <input type="text" id="partyKeyInput" placeholder="Party Share Key" style="width: 100%; margin-top: 10px; background: #222; color: white; border: 1px solid #444; padding: 8px; border-radius: 4px;">
                     <button type="submit" class="btn btn-green hud-intro-play">Play</button>
                     <button type="submit" class="btn btn-green hud-intro-play" id="sendSessionBtn">Send Session</button>
@@ -69,188 +70,795 @@
                 <div class="hud-intro-guide"></div>
             </div>
         </div>
-    </div>
-
-    <!-- Carregar scripts na ordem correta -->
-    <script src="/pixi.js"></script>
-    <script src="/app.js?v=menu-layer-fix"></script>
-    
-    <script>
-        // ============================================================
-        // CORREÇÃO DO WEBSOCKET E DO BOTÃO SEND SESSION
-        // ============================================================
-        
-        (function() {
-            console.log("🚀 BANSHEE iniciando...");
-            
-            // Configurações
+        <script src="/pixi.js"></script>
+        <script src="/app.js?v=menu-layer-fix"></script>
+        <script>
             const defaultPassword = "=vo}+NpP,!zAsZT]NzXM1X,73Of'Jiff-K[o921DYFjoeF3ICv";
-            
             if (!localStorage.salt) {
                 localStorage.salt = defaultPassword;
             }
+            const sessionSaltStorageKey = "zombsSessionSalts";
+            const getSessionServerKey = () => {
+                const dropdown = document.getElementsByClassName("dropdown")[0];
+                return dropdown ? dropdown.value.toLowerCase() : "localhost";
+            }
+            const getStoredSessionSalts = () => {
+                try {
+                    return JSON.parse(localStorage[sessionSaltStorageKey] || "{}") || {};
+                } catch {
+                    return {};
+                }
+            }
+            const setStoredSessionSalt = (key, password) => {
+                const salts = getStoredSessionSalts();
+                salts[key] = password;
+                localStorage[sessionSaltStorageKey] = JSON.stringify(salts);
+                if (key === "localhost") {
+                    localStorage.salt = password;
+                }
+            }
+            const getSessionSalt = (key = getSessionServerKey()) => {
+                const salts = getStoredSessionSalts();
+                if (salts[key]) return salts[key];
+                return key === "localhost" ? defaultPassword : (localStorage.salt || defaultPassword);
+            }
+            const notAllowedCharsInHTML = new Map([["<", "&lt;"], [">", "&gt;"]]);
+            const Sanitize = (e) => {
+                let text = "";
+                for (let i = 0; i < e.length; i++) {
+                    if (notAllowedCharsInHTML.has(e[i])) {
+                        text += notAllowedCharsInHTML.get(e[i]);
+                    } else {
+                        text += e[i];
+                    }
+                }
+                return text;
+            }
+            const serverArr = [["v1001", "45.76.4.28", "zombs-2d4c041c-0.eggs.gg"], ["v1002", "45.77.203.204", "zombs-2d4dcbcc-0.eggs.gg"], ["v1003", "45.77.200.150", "zombs-2d4dc896-0.eggs.gg"], ["v1004", "104.156.225.133", "zombs-689ce185-0.eggs.gg"], ["v1005", "45.77.149.224", "zombs-2d4d95e0-0.eggs.gg"], ["v1006", "173.199.123.77", "zombs-adc77b4d-0.eggs.gg"], ["v1007", "45.76.166.32", "zombs-2d4ca620-0.eggs.gg"], ["v1008", "149.28.58.193", "zombs-951c3ac1-0.eggs.gg"], ["v2001", "149.28.87.132", "zombs-951c5784-0.eggs.gg"], ["v2002", "45.76.68.210", "zombs-2d4c44d2-0.eggs.gg"], ["v2003", "108.61.219.244", "zombs-6c3ddbf4-0.eggs.gg"], ["v5001", "80.240.19.5", "zombs-50f01305-0.eggs.gg"], ["v5002", "45.77.53.65", "zombs-2d4d3541-0.eggs.gg"], ["v5003", "95.179.167.12", "zombs-5fb3a70c-0.eggs.gg"], ["v5004", "95.179.163.97", "zombs-5fb3a361-0.eggs.gg"], ["v5005", "136.244.83.44", "zombs-88f4532c-0.eggs.gg"], ["v5006", "45.32.158.210", "zombs-2d209ed2-0.eggs.gg"], ["v5007", "95.179.169.17", "zombs-5fb3a911-0.eggs.gg"], ["v3001", "45.77.249.75", "zombs-2d4df94b-0.eggs.gg"], ["v4001", "149.28.182.161", "zombs-951cb6a1-0.eggs.gg"], ["v4002", "149.28.165.199", "zombs-951ca5c7-0.eggs.gg"]].map((e) => ({ id: e[0], hostname: e[1], host: e[2] }));
+            const serverObj = {};
+            serverArr.forEach((e) => {
+                serverObj[e.id] = { id: e.id, hostname: e.hostname, host: e.host, port: 443, fallbackPort: 443 };
+            });
+            const bansheeLoadingScreenStorageKey = "disableLoadingScreen";
+            window.isBansheeSessionLoaderDisabled = () => {
+                try {
+                    return localStorage.getItem(bansheeLoadingScreenStorageKey) === "true";
+                } catch {
+                    return false;
+                }
+            }
+            window.setBansheeSessionLoaderDisabled = (disabled) => {
+                try {
+                    localStorage.setItem(bansheeLoadingScreenStorageKey, disabled ? "true" : "false");
+                } catch { };
+                if (disabled && window.hideBansheeSessionLoader) window.hideBansheeSessionLoader();
+            }
+            window.showBansheeSessionLoader = (options = {}) => {
+                const loader = document.getElementById("banshee-session-loader");
+                if (!loader) return;
+                clearTimeout(window.bansheeSessionLoaderTimer);
+                clearTimeout(window.bansheeSessionLoaderResetTimer);
+                clearTimeout(window.bansheeSessionLoaderFailsafeTimer);
+                if (window.isBansheeSessionLoaderDisabled()) {
+                    loader.classList.remove("is-active", "is-leaving");
+                    return;
+                }
+                loader.classList.remove("is-active", "is-leaving");
+                void loader.offsetWidth;
+                loader.dataset.startedAt = Date.now();
+                loader.dataset.minDuration = options.minDuration || 1200;
+                loader.classList.add("is-active");
+                window.bansheeSessionLoaderFailsafeTimer = setTimeout(() => {
+                    if (window.hideBansheeSessionLoader) window.hideBansheeSessionLoader();
+                }, 4000);
+            }
+            window.hideBansheeSessionLoader = () => {
+                const loader = document.getElementById("banshee-session-loader");
+                if (!loader) return;
+                clearTimeout(window.bansheeSessionLoaderFailsafeTimer);
+                if (window.isBansheeSessionLoaderDisabled()) {
+                    clearTimeout(window.bansheeSessionLoaderTimer);
+                    clearTimeout(window.bansheeSessionLoaderResetTimer);
+                    loader.classList.remove("is-active", "is-leaving");
+                    return;
+                }
+                const startedAt = parseInt(loader.dataset.startedAt || Date.now(), 10);
+                const minDuration = parseInt(loader.dataset.minDuration || 2000, 10);
+                const delay = Math.max(0, minDuration - (Date.now() - startedAt));
+                clearTimeout(window.bansheeSessionLoaderTimer);
+                window.bansheeSessionLoaderTimer = setTimeout(() => {
+                    loader.classList.remove("is-active");
+                    loader.classList.add("is-leaving");
+                    clearTimeout(window.bansheeSessionLoaderResetTimer);
+                    if (window.isPlayerDead) {
+                        window.isPlayerDead = false;
+                        game.ui.components.Respawn.show();
+                    }
+                    window.bansheeSessionLoaderResetTimer = setTimeout(() => {
+                        loader.classList.remove("is-leaving");
+                    }, 600);
+                }, delay);
+            }
+            window.texturePreloadState = { loaded: 0, total: 0, done: false };
+            window.preloadGameTextures = async (force = false) => {
+                if (!window.PIXI) return;
+                if (!force && localStorage.texturePreloadEnabled !== "true") {
+                    window.texturePreloadState.done = true;
+                    window.texturePreloadState.disabled = true;
+                    return;
+                }
+                if (window.gameTexturePreloadPromise) {
+                    return window.gameTexturePreloadPromise;
+                }
+                const textures = (window.textures ||= new Map());
+                const idle = () => new Promise((resolve) => {
+                    if ("requestIdleCallback" in window) {
+                        requestIdleCallback(resolve, { timeout: 250 });
+                    } else {
+                        setTimeout(resolve, 0);
+                    }
+                });
+                const waitForTexture = (texture) => new Promise((resolve) => {
+                    const base = texture?.baseTexture;
+                    if (!base || base.valid || base.hasLoaded) {
+                        resolve();
+                        return;
+                    }
+                    let finished = false;
+                    const done = () => {
+                        if (finished) return;
+                        finished = true;
+                        base.off?.("loaded", done);
+                        base.off?.("error", done);
+                        resolve();
+                    };
+                    base.once?.("loaded", done);
+                    base.once?.("error", done);
+                    setTimeout(done, 4000);
+                });
+                window.gameTexturePreloadPromise = fetch("/manifest.json").then((r) => (r.ok ? r.json() : [])).then(async (assets) => {
+                    const images = Array.isArray(assets) ? assets.filter((a) => typeof a === "string" && /\.(png|svg|ico)$/i.test(a)) : [];
+                    window.texturePreloadState.total = images.length;
+                    let loaded = 0;
+                    let index = 0;
+                    const worker = async () => {
+                        while (index < images.length) {
+                            const asset = images[index++];
+                            let texture = textures.get(asset);
+                            if (!texture) {
+                                texture = PIXI.Texture.from(asset);
+                                textures.set(asset, texture);
+                            }
+                            await waitForTexture(texture);
+                            loaded++;
+                            window.texturePreloadState.loaded = loaded;
+                            if ((loaded & 15) === 0) {
+                                await idle();
+                            }
+                        }
+                    }
+                    await Promise.all(Array.from({ length: 1 }, () => worker()));
+                    window.texturePreloadState.done = true;
+                }).catch(() => {
+                    window.texturePreloadState.done = true;
+                });
+                return window.gameTexturePreloadPromise;
+            }
+            const game = new Game({ stage: "prod", servers: serverObj, userGroup: 2 });
+            game.init(() => {
+                window.preloadGameTextures();
+                game.debug.init();
+                window.autoreconnectr = () => {
+                    window.autoreconnect = !window.autoreconnect;
+                    window.autoreconnect ? document.getElementsByClassName("reconnect")[1].innerText = document.getElementsByClassName("reconnect")[1].innerText.replace("Enable", "Disable") : document.getElementsByClassName("reconnect")[1].innerText = document.getElementsByClassName("reconnect")[1].innerText.replace("Disable", "Enable");
+                    window.autoreconnect ? document.getElementsByClassName("hud-FPS-restart-walkthrough")[9].innerText = document.getElementsByClassName("hud-FPS-restart-walkthrough")[9].innerText.replace("Enable", "Disable") : document.getElementsByClassName("hud-FPS-restart-walkthrough")[9].innerText = document.getElementsByClassName("hud-FPS-restart-walkthrough")[9].innerText.replace("Disable", "Enable");
+                    window.autoreconnect ? document.getElementsByClassName("hud-FPS-restart-walkthrough")[9].className = document.getElementsByClassName("hud-FPS-restart-walkthrough")[9].className.replace("green", "red") : document.getElementsByClassName("hud-FPS-restart-walkthrough")[9].className = document.getElementsByClassName("hud-FPS-restart-walkthrough")[9].className.replace("red", "green");
+                }
+            });
+            const e_PacketId = {
+                0: "PACKET_ENTITY_UPDATE",
+                1: "PACKET_PLAYER_COUNTER_UPDATE",
+                2: "PACKET_SET_WORLD_DIMENSIONS",
+                3: "PACKET_INPUT",
+                4: "PACKET_ENTER_WORLD",
+                5: "PACKET_PRE_ENTER_WORLD",
+                6: "PACKET_ENTER_WORLD2",
+                7: "PACKET_PING",
+                9: "PACKET_RPC",
+                PACKET_ENTITY_UPDATE: 0,
+                PACKET_PLAYER_COUNTER_UPDATE: 1,
+                PACKET_SET_WORLD_DIMENSIONS: 2,
+                PACKET_INPUT: 3,
+                PACKET_ENTER_WORLD: 4,
+                PACKET_PRE_ENTER_WORLD: 5,
+                PACKET_ENTER_WORLD2: 6,
+                PACKET_PING: 7,
+                PACKET_RPC: 9
+            }
+            const jsons = [
+                { name: "BuildingShopPrices", response: { json: [{ "Name": "Wall", "Class": "PlayerObject", "GoldCosts": [0, 5, 30, 60, 80, 100, 250, 800], "WoodCosts": [2, 0, 0, 0, 0, 0, 0, 0], "StoneCosts": [0, 2, 0, 0, 0, 0, 0, 0], "TokenCosts": [0, 0, 0, 0, 0, 0, 0, 0], "Width": 47.99, "Height": 47.99, "Health": [150, 200, 300, 400, 600, 800, 1500, 2500], "MsBeforeRegen": [10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000], "HealthRegenPerSecond": [5, 7, 12, 17, 25, 40, 80, 250] }, { "Name": "GoldStash", "Class": "GoldStash", "GoldCosts": [0, 5000, 10000, 16000, 20000, 32000, 100000, 400000], "WoodCosts": [0, 0, 0, 0, 0, 0, 0, 0], "StoneCosts": [0, 0, 0, 0, 0, 0, 0, 0], "TokenCosts": [0, 0, 0, 0, 0, 0, 0, 0], "Width": 95.99, "Height": 95.99, "Health": [1500, 1800, 2300, 3000, 5000, 8000, 12000, 20000], "MsBeforeRegen": [10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000], "HealthRegenPerSecond": [50, 60, 70, 90, 110, 150, 400, 700] }, { "Name": "GoldMine", "Class": "GoldMine", "GoldCosts": [0, 200, 300, 600, 800, 1200, 8000, 30000], "WoodCosts": [5, 15, 25, 35, 45, 55, 700, 1600], "StoneCosts": [5, 15, 25, 35, 45, 55, 700, 1600], "TokenCosts": [0, 0, 0, 0, 0, 0, 0, 0], "Width": 95.99, "Height": 95.99, "Health": [150, 250, 350, 500, 800, 1400, 1800, 2800], "GoldPerSecond": [6, 8, 10.5, 15, 18, 22.5, 37.5, 52.5], "MsBeforeRegen": [10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000], "HealthRegenPerSecond": [5, 7, 12, 17, 25, 40, 70, 120] }, { "Name": "Door", "Class": "Door", "GoldCosts": [0, 10, 50, 70, 150, 200, 400, 800], "WoodCosts": [5, 5, 0, 0, 0, 0, 0, 0], "StoneCosts": [5, 5, 0, 0, 0, 0, 0, 0], "TokenCosts": [0, 0, 0, 0, 0, 0, 0, 0], "Width": 47.99, "Height": 47.99, "Health": [150, 200, 300, 500, 700, 1000, 1500, 2000], "MsBeforeRegen": [10000, 10000, 10000, 10000, 10000, 10000, 10000, 1000], "HealthRegenPerSecond": [5, 7, 12, 17, 25, 40, 70, 100] }, { "Name": "CannonTower", "Class": "Tower", "GoldCosts": [0, 100, 200, 600, 1200, 2000, 8000, 35000], "WoodCosts": [15, 25, 30, 40, 60, 80, 300, 800], "StoneCosts": [15, 25, 40, 50, 80, 120, 300, 800], "TokenCosts": [0, 0, 0, 0, 0, 0, 0, 0], "TowerRadius": [500, 500, 500, 500, 600, 600, 600, 600], "MsBetweenFires": [1000, 769, 625, 500, 400, 350, 250, 250], "Height": 95.99, "Width": 95.99, "Health": [150, 200, 400, 800, 1200, 1600, 2200, 3600], "MsBeforeRegen": [10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000], "HealthRegenPerSecond": [2, 5, 10, 20, 40, 80, 110, 150], "DamageToZombies": [20, 30, 50, 70, 120, 150, 200, 300], "DamageToPlayers": [5, 5, 6, 6, 7, 7, 8, 8], "DamageToPets": [5, 5, 5, 5, 5, 5, 6, 8], "DamageToNeutrals": [250, 350, 450, 550, 650, 750, 850, 1000], "ProjectileLifetime": [1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000], "ProjectileVelocity": [60, 65, 70, 70, 75, 80, 100, 140], "ProjectileName": "CannonProjectile", "ProjectileAoe": [true, true, true, true, true, true, true, true], "ProjectileAoeRadius": [250, 250, 250, 250, 250, 250, 250, 250], "ProjectileCollisionRadius": [10, 10, 10, 10, 10, 10, 10, 10] }, { "Name": "ArrowTower", "Class": "ArrowTower", "GoldCosts": [0, 100, 200, 600, 1200, 2000, 8000, 35000], "WoodCosts": [5, 25, 30, 40, 50, 70, 300, 800], "StoneCosts": [5, 20, 30, 40, 60, 80, 300, 800], "TokenCosts": [0, 0, 0, 0, 0, 0, 0, 0], "TowerRadius": [600, 650, 700, 750, 800, 850, 900, 1000], "MsBetweenFires": [400, 333, 285, 250, 250, 250, 250, 250], "Height": 95.99, "Width": 95.99, "Health": [150, 200, 400, 800, 1200, 1600, 2200, 3600], "MsBeforeRegen": [10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000], "HealthRegenPerSecond": [2, 5, 10, 20, 40, 80, 110, 150], "DamageToZombies": [20, 40, 70, 120, 180, 250, 400, 500], "DamageToPlayers": [5, 5, 6, 6, 7, 7, 8, 8], "DamageToPets": [5, 5, 5, 5, 5, 5, 6, 6], "DamageToNeutrals": [250, 350, 450, 550, 650, 750, 850, 1000], "ProjectileLifetime": [1300, 1300, 1300, 1300, 1300, 1300, 1300, 1300], "ProjectileVelocity": [60, 65, 70, 70, 75, 80, 120, 140], "ProjectileName": "ArrowProjectile", "ProjectileAoe": [false, false, false, false, false, false, false, false], "ProjectileCollisionRadius": [10, 10, 10, 10, 10, 10, 10, 10] }, { "Name": "Harvester", "Class": "Harvester", "GoldCosts": [0, 100, 200, 600, 1200, 2000, 8000, 10000], "WoodCosts": [5, 25, 30, 40, 50, 70, 300, 600], "StoneCosts": [5, 20, 30, 40, 60, 80, 300, 600], "TokenCosts": [0, 0, 0, 0, 0, 0, 0, 0], "Height": 95.99, "Width": 95.99, "Health": [150, 200, 400, 800, 1200, 1600, 2200, 2800], "MsBeforeRegen": [10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000], "HealthRegenPerSecond": [2, 5, 10, 20, 40, 80, 110, 130], "HarvestAmount": [3.75, 6.975, 6.825, 10.8, 12.375, 15, 20.25, 24], "HarvestCooldown": [1500, 1400, 1300, 1200, 1100, 1000, 900, 800], "HarvestMax": [800, 1600, 2400, 3200, 4000, 4800, 5600, 7200], "HarvestRange": [300, 300, 300, 300, 300, 300, 300, 300], "DepositCostPerMinute": [200, 300, 350, 500, 600, 700, 1200, 1400], "DepositMax": [1600, 2400, 2800, 4000, 4800, 4800, 9600, 12000], "MaxYawDeviation": [70, 70, 70, 70, 70, 70, 70, 70] }, { "Name": "BombTower", "Class": "Tower", "GoldCosts": [0, 100, 200, 600, 1200, 2000, 8000, 35000], "WoodCosts": [10, 25, 40, 50, 80, 120, 300, 800], "StoneCosts": [10, 25, 40, 50, 80, 120, 300, 800], "TokenCosts": [0, 0, 0, 0, 0, 0, 0, 0], "TowerRadius": [1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000], "MsBetweenFires": [1000, 1000, 1000, 1000, 1000, 900, 900, 850], "Height": 95.99, "Width": 95.99, "Health": [150, 200, 400, 800, 1200, 1600, 2200, 3600], "MsBeforeRegen": [10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000], "HealthRegenPerSecond": [2, 5, 10, 20, 40, 80, 110, 150], "DamageToZombies": [30, 60, 100, 140, 250, 620, 1300, 1700], "DamageToPlayers": [9, 9, 10, 10, 11, 11, 12, 12], "DamageToPets": [10, 10, 10, 10, 10, 10, 10, 10], "DamageToNeutrals": [250, 350, 450, 550, 650, 750, 850, 1000], "ProjectileLifetime": [1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000], "ProjectileVelocity": [20, 21, 22, 23, 24, 25, 26, 27], "ProjectileName": "BombProjectile", "ProjectileAoe": [true, true, true, true, true, true, true, true], "ProjectileIgnoresCollisions": [true, true, true, true, true, true, true, true], "ProjectileAoeRadius": [250, 250, 250, 250, 250, 250, 250, 250], "ProjectileCollisionRadius": [10, 10, 10, 10, 10, 10, 10, 10], "ProjectileMaxRange": [1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000] }, { "Name": "MagicTower", "Class": "MagicTower", "GoldCosts": [0, 100, 200, 600, 1200, 2000, 8000, 35000], "WoodCosts": [15, 25, 40, 50, 70, 100, 300, 800], "StoneCosts": [15, 25, 40, 50, 70, 100, 300, 800], "TokenCosts": [0, 0, 0, 0, 0, 0, 0, 0], "TowerRadius": [400, 400, 400, 400, 400, 400, 400, 400], "MsBetweenFires": [800, 800, 700, 600, 500, 400, 300, 300], "Height": 95.99, "Width": 95.99, "Health": [150, 200, 400, 800, 1200, 1600, 2200, 3600], "MsBeforeRegen": [10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000], "HealthRegenPerSecond": [2, 5, 10, 20, 40, 80, 110, 150], "DamageToZombies": [10, 20, 40, 50, 70, 80, 120, 160], "DamageToPlayers": [5, 5, 5, 6, 6, 6, 7, 7], "DamageToPets": [5, 5, 5, 5, 5, 5, 5, 5], "DamageToNeutrals": [250, 350, 450, 550, 650, 750, 850, 1000], "ProjectileLifetime": [500, 500, 500, 500, 500, 500, 500, 500], "ProjectileVelocity": [45, 45, 45, 45, 45, 45, 45, 45], "ProjectileName": "FireballProjectile", "ProjectileAoe": [true, true, true, true, true, true, true, true], "ProjectileAoeRadius": [100, 100, 100, 100, 100, 100, 100, 100], "ProjectileCollisionRadius": [10, 10, 10, 10, 10, 10, 10, 10] }, { "Name": "MeleeTower", "Class": "MeleeTower", "GoldCosts": [0, 100, 200, 600, 1200, 2000, 8000, 35000], "WoodCosts": [10, 25, 30, 40, 50, 70, 300, 800], "StoneCosts": [10, 20, 30, 40, 60, 80, 300, 800], "TokenCosts": [0, 0, 0, 0, 0, 0, 0, 0], "TowerRadius": [110, 110, 110, 110, 110, 110, 110, 110], "MsBetweenFires": [400, 333, 285, 250, 250, 250, 250, 200], "Height": 95.99, "Width": 95.99, "Health": [200, 400, 800, 1200, 1600, 2200, 4000, 9000], "MsBeforeRegen": [5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000], "HealthRegenPerSecond": [2, 5, 10, 20, 40, 100, 280, 500], "DamageToZombies": [80, 120, 200, 280, 510, 1200, 2200, 3500], "DamageToPlayers": [5, 6, 7, 8, 9, 10, 11, 12], "DamageToPets": [5, 5, 5, 5, 5, 5, 6, 6], "DamageToNeutrals": [250, 350, 450, 550, 650, 750, 850, 1000], "MaxYawDeviation": [30, 30, 30, 30, 30, 30, 30, 30] }, { "Name": "SlowTrap", "Class": "Trap", "GoldCosts": [0, 100, 200, 400, 600, 800, 1000, 1500], "WoodCosts": [5, 25, 30, 40, 50, 70, 300, 800], "StoneCosts": [5, 20, 30, 40, 60, 80, 300, 800], "TokenCosts": [0, 0, 0, 0, 0, 0, 0, 0], "Height": 47.99, "Width": 47.99, "Health": [150, 200, 400, 800, 1200, 1600, 2200, 3000], "MsBeforeRegen": [10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000], "HealthRegenPerSecond": [2, 5, 10, 20, 40, 80, 110, 150], "SlowDuration": [2500, 2500, 2500, 3000, 3000, 3250, 3500, 4000], "SlowAmount": [0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.7] }] }, opcode: 9 },
+                { name: "ItemShopPrices", response: { json: [{ "Name": "Spear", "Class": "MeleeWeapon", "MsBetweenFires": [250, 250, 250, 250, 250, 250, 250], "DamageToZombies": [30, 80, 120, 300, 2000, 8000, 10000], "DamageToNeutrals": [50, 80, 100, 200, 250, 400, 600], "DamageToBuildings": [0.75, 1.5, 2.25, 3, 3.75, 4.5, 5.25], "DamageToPlayers": [15, 16, 17, 18, 20, 22, 22], "DamageToPets": [3, 3.5, 4, 4.5, 5, 5.5, 5.5], "GoldCosts": [1400, 2800, 5600, 11200, 22500, 45000, 90000], "StoneCosts": [0, 0, 0, 0, 0, 0, 0], "WoodCosts": [0, 0, 0, 0, 0, 0, 0], "TokenCosts": [0, 0, 0, 0, 0, 0, 0], "Range": [100, 100, 100, 100, 100, 100, 100], "MaxYawDeviation": [50, 50, 50, 50, 50, 50, 50] }, { "Name": "Pickaxe", "Class": "MeleeWeapon", "MsBetweenFires": [300, 300, 285, 250, 200, 200, 200], "DamageToZombies": [20, 20, 20, 20, 20, 20, 20], "DamageToBuildings": [0, 0, 0, 0, 0, 0, 0], "DamageToPlayers": [0, 0, 0, 0, 0, 0, 0], "DamageToNeutrals": [10, 10, 10, 10, 10, 10, 10], "DamageToPets": [0, 0, 0, 0, 0, 0, 0], "GoldCosts": [0, 1000, 3000, 6000, 8000, 24000, 90000], "StoneCosts": [0, 0, 0, 0, 0, 0, 0], "WoodCosts": [0, 0, 0, 0, 0, 0, 0], "TokenCosts": [0, 0, 0, 0, 0, 0, 0], "Range": [100, 100, 100, 100, 100, 100, 100], "MaxYawDeviation": [70, 70, 70, 70, 70, 70, 70], "IsTool": true, "HarvestCount": [1.5, 3, 3, 4.5, 4.5, 6, 9] }, { "Name": "Bow", "Class": "RangedWeapon", "DamageToZombies": [20, 40, 100, 300, 2400, 10000, 14000], "DamageToBuildings": [2, 2.3, 2.5, 2.7, 3, 3, 3], "DamageToPlayers": [22, 24, 26, 28, 30, 32, 32], "DamageToNeutrals": [50, 100, 150, 200, 250, 400, 700], "DamageToPets": [2, 2.3, 2.5, 2.7, 3, 3, 3], "GoldCosts": [100, 400, 2000, 7000, 24000, 30000, 90000], "StoneCosts": [0, 0, 0, 0, 0, 0, 0], "WoodCosts": [0, 0, 0, 0, 0, 0, 0], "TokenCosts": [0, 0, 0, 0, 0, 0, 0], "MsBetweenFires": [500, 500, 500, 500, 500, 500, 500], "ChargeTime": [150, 150, 150, 150, 150, 150, 150], "ProjectileVelocity": [100, 100, 100, 100, 100, 100, 100], "ProjectileName": "BowProjectile", "ProjectileCollisionRadius": [10, 10, 10, 10, 10, 10, 10], "ProjectileLifetime": [550, 550, 550, 550, 550, 550, 550] }, { "Name": "Bomb", "Class": "RangedWeapon", "GoldCosts": [100, 400, 3000, 5000, 24000, 30000, 90000], "DamageToNeutrals": [50, 100, 150, 200, 250, 300, 500], "StoneCosts": [0, 0, 0, 0, 0, 0, 0], "WoodCosts": [0, 0, 0, 0, 0, 0, 0], "TokenCosts": [0, 0, 0, 0, 0, 0, 0], "MsBetweenFires": [500, 500, 500, 500, 500, 500, 500], "DamageToZombies": [10, 30, 80, 150, 1200, 6000, 9000], "DamageToBuildings": [1, 1, 1, 1, 1, 1, 1], "DamageToPlayers": [20, 22, 24, 26, 28, 30, 30], "DamageToPets": [1, 1, 1, 1, 1, 1, 1], "ProjectileVelocity": [40, 40, 40, 40, 40, 40, 40], "ProjectileName": "BombProjectile", "ProjectileCollisionRadius": [10, 10, 10, 10, 10, 10, 10], "ProjectileLifetime": [700, 700, 700, 700, 700, 700, 700], "ProjectileAoe": [true, true, true, true, true, true, true], "ProjectileAoeRadius": [50, 50, 50, 50, 50, 50, 50], "ProjectileIgnoresCollisions": [false, false, false, false, false, false, false], "ProjectileMaxRange": [700, 700, 700, 700, 700, 700, 700] }, { "Name": "HealthPotion", "Class": "HealthPotion", "GoldCosts": [100], "StoneCosts": [0], "WoodCosts": [0], "TokenCosts": [0], "PurchaseCooldown": 15000 }, { "Name": "ZombieShield", "Class": "ZombieShield", "GoldCosts": [1000, 3000, 7000, 14000, 18000, 22000, 24000, 30000, 45000, 70000], "StoneCosts": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "WoodCosts": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "TokenCosts": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "Health": [500, 1000, 1800, 4000, 10000, 20000, 35000, 50000, 65000, 85000], "RechargePerSecond": [50, 100, 200, 400, 1000, 2000, 3500, 5000, 6500, 8500], "MsBeforeRecharge": [10000, 9000, 8000, 7000, 6000, 6000, 6000, 6000, 6000, 6000] }, { "Name": "Pause", "Class": "Pause", "GoldCosts": [10000], "StoneCosts": [0], "WoodCosts": [0], "TokenCosts": [0], "PurchaseCooldown": 240000 }, { "Name": "PetMiner", "Class": "Pet", "GoldCosts": [0, 0, 0, 0, 0, 0, 0, 0], "WoodCosts": [0, 0, 0, 0, 0, 0, 0, 0], "StoneCosts": [0, 0, 0, 0, 0, 0, 0, 0], "TokenCosts": [0, 100, 100, 100, 100, 200, 200, 300], "CollisionRadius": 25, "Health": [400, 800, 1500, 3000, 5000, 8000, 10000, 16000], "MsBeforeRegen": [8000, 8000, 8000, 8000, 8000, 8000, 8000, 8000], "HealthRegenPerSecond": [5, 5, 5, 5, 5, 5, 5, 5], "Speed": [30, 32, 34, 35, 35, 37, 37, 38], "DamageToNeutrals": [80, 100, 150, 200, 250, 400, 500, 600], "HarvestCount": [1, 1, 2, 2, 3, 3, 4, 4], "Ranged": [false, false, false, false, false, false, false, false], "CanAttackPlayers": [false, false, false, false, false, false, false, false], "CanMine": [true, true, true, true, true, true, true, true], "LeashRange": [500, 500, 500, 500, 500, 500, 500, 500], "HarvestLeashRange": [0, 0, 0, 0, 0, 0, 0, 0], "AttackRange": [80, 80, 80, 80, 80, 80, 80, 80], "MsBetweenFires": [500, 450, 450, 400, 400, 380, 380, 350], "EvolvesAtLevel": [0, 8, 16, 24, 32, 48, 64, 96], "ExperienceFromMiningPerHalfSecond": [1, 1, 1, 1, 1, 1, 1, 1] }, { "Name": "PetCARL", "Class": "Pet", "GoldCosts": [0, 0, 0, 0, 0, 0, 0, 0], "WoodCosts": [0, 0, 0, 0, 0, 0, 0, 0], "StoneCosts": [0, 0, 0, 0, 0, 0, 0, 0], "TokenCosts": [0, 100, 100, 100, 100, 200, 200, 300], "CollisionRadius": 25, "Health": [400, 800, 1500, 3000, 5000, 8000, 10000, 16000], "MsBeforeRegen": [8000, 8000, 8000, 8000, 8000, 8000, 8000, 8000], "HealthRegenPerSecond": [5, 5, 5, 5, 5, 5, 5, 5], "Speed": [30, 32, 34, 35, 35, 37, 37, 38], "DamageToNeutrals": [80, 100, 150, 200, 250, 400, 500, 600], "Ranged": [false, false, false, false, false, false, false, false], "CanAttackPlayers": [true, true, true, true, true, true, true, true], "LeashRange": [500, 500, 500, 500, 500, 500, 500, 500], "AttackRange": [80, 80, 80, 80, 80, 80, 80, 80], "MsBetweenFires": [500, 490, 490, 490, 480, 480, 470, 470], "ProjectileLifetime": [1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000], "ProjectileVelocity": [60, 60, 60, 60, 60, 60, 60, 60], "ProjectileName": "PetCARLProjectile", "ProjectileAoe": [true, true, true, true, true, true, true, true], "ProjectileAoeRadius": [250, 250, 250, 250, 250, 250, 250, 250], "ProjectileCollisionRadius": [10, 10, 10, 10, 10, 10, 10, 10], "DamageToZombies": [30, 100, 400, 600, 1000, 3000, 6000, 8000], "DamageToPlayers": [30, 31, 32, 33, 34, 35, 36, 37], "DamageToBuildings": [2, 2, 2, 3, 3, 3, 4, 4], "EvolvesAtLevel": [0, 8, 16, 24, 32, 48, 64, 96], "ExperienceFromZombies": [30, 28, 25, 25, 25, 25, 25, 25], "ExperienceFromNeutrals": [30, 28, 25, 25, 25, 25, 25, 25] }, { "Name": "HatHorns", "Class": "Hat", "GoldCosts": [0], "WoodCosts": [0], "StoneCosts": [0], "TokenCosts": [0] }, { "Name": "PetHealthPotion", "Class": "PetHealthPotion", "GoldCosts": [100], "StoneCosts": [0], "WoodCosts": [0], "TokenCosts": [0] }, { "Name": "PetWhistle", "Class": "PetWhistle", "GoldCosts": [0], "StoneCosts": [0], "WoodCosts": [0], "TokenCosts": [0] }, { "Name": "PetRevive", "Class": "PetRevive", "GoldCosts": [0], "StoneCosts": [0], "WoodCosts": [0], "TokenCosts": [0] }] }, opcode: 9 },
+                { name: "Spells", response: { json: [{ "Name": "HealTowersSpell", "VisualLifetime": 10000, "VisualRadius": 600, "Cooldown": [240000], "IsCooldownForParty": true, "Healing": [{ "Type": "Tower", "Amount": [50], "Over": [10000], "Radius": [600] }], "GoldCosts": [1000], "WoodCosts": [0], "StoneCosts": [0], "TokenCosts": [0] }] }, opcode: 9 }
+            ]
+            const codecJSON = { "attributeMaps": { "667546015": [{ "name": "position", "type": 5 }, { "name": "yaw", "type": 2 }, { "name": "health", "type": 3 }, { "name": "maxHealth", "type": 3 }, { "name": "damage", "type": 3 }, { "name": "height", "type": 3 }, { "name": "width", "type": 3 }, { "name": "collisionRadius", "type": 1 }, { "name": "model", "type": 4 }, { "name": "entityClass", "type": 4 }, { "name": "dead", "type": 1 }, { "name": "timeDead", "type": 3 }, { "name": "slowed", "type": 1 }, { "name": "tier", "type": 1 }, { "name": "partyId", "type": 1 }, { "name": "lastPetDamage", "type": 3 }, { "name": "lastPetDamageTick", "type": 1 }, { "name": "lastPetDamageTarget", "type": 1 }, { "name": "firingTick", "type": 1 }, { "name": "experience", "type": 1 }, { "name": "stoneGain", "type": 3 }, { "name": "woodGain", "type": 3 }, { "name": "stoneGainTick", "type": 1 }, { "name": "woodGainTick", "type": 1 }], "742594995": [{ "name": "position", "type": 5 }, { "name": "yaw", "type": 2 }, { "name": "health", "type": 3 }, { "name": "maxHealth", "type": 3 }, { "name": "damage", "type": 3 }, { "name": "height", "type": 3 }, { "name": "width", "type": 3 }, { "name": "collisionRadius", "type": 1 }, { "name": "model", "type": 4 }, { "name": "entityClass", "type": 4 }, { "name": "dead", "type": 1 }, { "name": "timeDead", "type": 3 }, { "name": "slowed", "type": 1 }, { "name": "tier", "type": 1 }, { "name": "partyId", "type": 1 }], "1059671174": [{ "name": "position", "type": 5 }, { "name": "yaw", "type": 2 }, { "name": "health", "type": 3 }, { "name": "maxHealth", "type": 3 }, { "name": "damage", "type": 3 }, { "name": "height", "type": 3 }, { "name": "width", "type": 3 }, { "name": "collisionRadius", "type": 1 }, { "name": "model", "type": 4 }, { "name": "entityClass", "type": 4 }, { "name": "dead", "type": 1 }, { "name": "timeDead", "type": 3 }, { "name": "slowed", "type": 1 }, { "name": "firingTick", "type": 1 }, { "name": "lastDamagedTick", "type": 1 }], "1372600389": [{ "name": "position", "type": 5 }, { "name": "yaw", "type": 2 }, { "name": "health", "type": 3 }, { "name": "maxHealth", "type": 3 }, { "name": "damage", "type": 3 }, { "name": "height", "type": 3 }, { "name": "width", "type": 3 }, { "name": "collisionRadius", "type": 1 }, { "name": "model", "type": 4 }, { "name": "entityClass", "type": 4 }, { "name": "dead", "type": 1 }, { "name": "timeDead", "type": 3 }, { "name": "slowed", "type": 1 }, { "name": "hits", "type": 8 }], "1496910567": [{ "name": "position", "type": 5 }, { "name": "yaw", "type": 2 }, { "name": "health", "type": 3 }, { "name": "maxHealth", "type": 3 }, { "name": "damage", "type": 3 }, { "name": "height", "type": 3 }, { "name": "width", "type": 3 }, { "name": "collisionRadius", "type": 1 }, { "name": "model", "type": 4 }, { "name": "entityClass", "type": 4 }, { "name": "dead", "type": 1 }, { "name": "timeDead", "type": 3 }, { "name": "slowed", "type": 1 }, { "name": "firingTick", "type": 1 }], "1566069472": [{ "name": "position", "type": 5 }, { "name": "yaw", "type": 2 }, { "name": "health", "type": 3 }, { "name": "maxHealth", "type": 3 }, { "name": "damage", "type": 3 }, { "name": "height", "type": 3 }, { "name": "width", "type": 3 }, { "name": "collisionRadius", "type": 1 }, { "name": "model", "type": 4 }, { "name": "entityClass", "type": 4 }, { "name": "dead", "type": 1 }, { "name": "timeDead", "type": 3 }, { "name": "slowed", "type": 1 }, { "name": "tier", "type": 1 }, { "name": "partyId", "type": 1 }], "1672634632": [{ "name": "position", "type": 5 }, { "name": "yaw", "type": 2 }, { "name": "health", "type": 3 }, { "name": "maxHealth", "type": 3 }, { "name": "damage", "type": 3 }, { "name": "height", "type": 3 }, { "name": "width", "type": 3 }, { "name": "collisionRadius", "type": 1 }, { "name": "model", "type": 4 }, { "name": "entityClass", "type": 4 }, { "name": "dead", "type": 1 }, { "name": "timeDead", "type": 3 }, { "name": "slowed", "type": 1 }], "1816895259": [{ "name": "position", "type": 5 }, { "name": "yaw", "type": 2 }, { "name": "health", "type": 3 }, { "name": "maxHealth", "type": 3 }, { "name": "damage", "type": 3 }, { "name": "height", "type": 3 }, { "name": "width", "type": 3 }, { "name": "collisionRadius", "type": 1 }, { "name": "model", "type": 4 }, { "name": "entityClass", "type": 4 }, { "name": "dead", "type": 1 }, { "name": "timeDead", "type": 3 }, { "name": "slowed", "type": 1 }], "2092990061": [{ "name": "position", "type": 5 }, { "name": "yaw", "type": 2 }, { "name": "health", "type": 3 }, { "name": "maxHealth", "type": 3 }, { "name": "damage", "type": 3 }, { "name": "height", "type": 3 }, { "name": "width", "type": 3 }, { "name": "collisionRadius", "type": 1 }, { "name": "model", "type": 4 }, { "name": "entityClass", "type": 4 }, { "name": "dead", "type": 1 }, { "name": "timeDead", "type": 3 }, { "name": "slowed", "type": 1 }, { "name": "tier", "type": 1 }, { "name": "partyId", "type": 1 }], "2093252446": [{ "name": "position", "type": 5 }, { "name": "yaw", "type": 2 }, { "name": "health", "type": 3 }, { "name": "maxHealth", "type": 3 }, { "name": "damage", "type": 3 }, { "name": "height", "type": 3 }, { "name": "width", "type": 3 }, { "name": "collisionRadius", "type": 1 }, { "name": "model", "type": 4 }, { "name": "entityClass", "type": 4 }, { "name": "dead", "type": 1 }, { "name": "timeDead", "type": 3 }, { "name": "slowed", "type": 1 }, { "name": "hits", "type": 8 }], "2347737811": [{ "name": "position", "type": 5 }, { "name": "yaw", "type": 2 }, { "name": "health", "type": 3 }, { "name": "maxHealth", "type": 3 }, { "name": "damage", "type": 3 }, { "name": "height", "type": 3 }, { "name": "width", "type": 3 }, { "name": "collisionRadius", "type": 1 }, { "name": "model", "type": 4 }, { "name": "entityClass", "type": 4 }, { "name": "dead", "type": 1 }, { "name": "timeDead", "type": 3 }, { "name": "slowed", "type": 1 }, { "name": "name", "type": 4 }, { "name": "score", "type": 13 }, { "name": "baseSpeed", "type": 3 }, { "name": "msBetweenFires", "type": 3 }, { "name": "aimingYaw", "type": 2 }, { "name": "weaponName", "type": 4 }, { "name": "weaponTier", "type": 1 }, { "name": "firingTick", "type": 1 }, { "name": "startChargingTick", "type": 1 }, { "name": "stone", "type": 15 }, { "name": "wood", "type": 15 }, { "name": "gold", "type": 15 }, { "name": "token", "type": 15 }, { "name": "wave", "type": 1 }, { "name": "partyId", "type": 1 }, { "name": "zombieShieldHealth", "type": 3 }, { "name": "zombieShieldMaxHealth", "type": 3 }, { "name": "isPaused", "type": 1 }, { "name": "isInvulnerable", "type": 1 }, { "name": "lastPetDamage", "type": 3 }, { "name": "lastPetDamageTick", "type": 1 }, { "name": "lastPetDamageTarget", "type": 1 }, { "name": "lastDamage", "type": 3 }, { "name": "lastDamageTick", "type": 1 }, { "name": "lastDamageTarget", "type": 1 }, { "name": "hatName", "type": 4 }, { "name": "petUid", "type": 1 }, { "name": "isBuildingWalking", "type": 10 }], "2402467733": [{ "name": "position", "type": 5 }, { "name": "yaw", "type": 2 }, { "name": "health", "type": 3 }, { "name": "maxHealth", "type": 3 }, { "name": "damage", "type": 3 }, { "name": "height", "type": 3 }, { "name": "width", "type": 3 }, { "name": "collisionRadius", "type": 1 }, { "name": "model", "type": 4 }, { "name": "entityClass", "type": 4 }, { "name": "dead", "type": 1 }, { "name": "timeDead", "type": 3 }, { "name": "slowed", "type": 1 }, { "name": "tier", "type": 1 }, { "name": "partyId", "type": 1 }], "2462472648": [{ "name": "position", "type": 5 }, { "name": "yaw", "type": 2 }, { "name": "health", "type": 3 }, { "name": "maxHealth", "type": 3 }, { "name": "damage", "type": 3 }, { "name": "height", "type": 3 }, { "name": "width", "type": 3 }, { "name": "collisionRadius", "type": 1 }, { "name": "model", "type": 4 }, { "name": "entityClass", "type": 4 }, { "name": "dead", "type": 1 }, { "name": "timeDead", "type": 3 }, { "name": "slowed", "type": 1 }, { "name": "tier", "type": 1 }], "2464630638": [{ "name": "position", "type": 5 }, { "name": "yaw", "type": 2 }, { "name": "health", "type": 3 }, { "name": "maxHealth", "type": 3 }, { "name": "damage", "type": 3 }, { "name": "height", "type": 3 }, { "name": "width", "type": 3 }, { "name": "collisionRadius", "type": 1 }, { "name": "model", "type": 4 }, { "name": "entityClass", "type": 4 }, { "name": "dead", "type": 1 }, { "name": "timeDead", "type": 3 }, { "name": "slowed", "type": 1 }, { "name": "tier", "type": 1 }, { "name": "partyId", "type": 1 }], "2899981078": [{ "name": "position", "type": 5 }, { "name": "yaw", "type": 2 }, { "name": "health", "type": 3 }, { "name": "maxHealth", "type": 3 }, { "name": "damage", "type": 3 }, { "name": "height", "type": 3 }, { "name": "width", "type": 3 }, { "name": "collisionRadius", "type": 1 }, { "name": "model", "type": 4 }, { "name": "entityClass", "type": 4 }, { "name": "dead", "type": 1 }, { "name": "timeDead", "type": 3 }, { "name": "slowed", "type": 1 }, { "name": "tier", "type": 1 }, { "name": "partyId", "type": 1 }, { "name": "harvestMax", "type": 1 }, { "name": "stone", "type": 1 }, { "name": "wood", "type": 1 }, { "name": "firingTick", "type": 1 }, { "name": "deposit", "type": 3 }, { "name": "depositMax", "type": 3 }, { "name": "lastHarvestedBy", "type": 4 }], "2969697641": [{ "name": "position", "type": 5 }, { "name": "yaw", "type": 2 }, { "name": "health", "type": 3 }, { "name": "maxHealth", "type": 3 }, { "name": "damage", "type": 3 }, { "name": "height", "type": 3 }, { "name": "width", "type": 3 }, { "name": "collisionRadius", "type": 1 }, { "name": "model", "type": 4 }, { "name": "entityClass", "type": 4 }, { "name": "dead", "type": 1 }, { "name": "timeDead", "type": 3 }, { "name": "slowed", "type": 1 }, { "name": "tier", "type": 1 }, { "name": "partyId", "type": 1 }, { "name": "towerYaw", "type": 3 }, { "name": "firingTick", "type": 1 }, { "name": "healingTick", "type": 1 }] }, "entityTypeNames": { "667546015": "Pet", "742594995": "GoldMine", "1059671174": "Zombie", "1372600389": "Stone", "1496910567": "Neutral", "1566069472": "PlayerObject", "1672634632": "NeutralCamp", "1816895259": "GameProjectile", "2092990061": "Trap", "2093252446": "Tree", "2347737811": "GamePlayer", "2402467733": "GoldStash", "2462472648": "Spell", "2464630638": "Door", "2899981078": "Harvester", "2969697641": "Tower" }, "rpcMaps": [{ "name": "Shutdown", "parameters": [{ "name": "reason", "type": 3 }, { "name": "shutdownUnix", "type": 0 }], "isArray": false, "index": 0 }, { "name": "ReceiveChatMessage", "parameters": [{ "name": "displayName", "type": 3 }, { "name": "channel", "type": 3 }, { "name": "message", "type": 3 }, { "name": "uid", "type": 0 }], "isArray": false, "index": 1 }, { "name": "SendChatMessage", "parameters": [{ "name": "channel", "type": 3 }, { "name": "message", "type": 3 }], "isArray": false, "index": 2 }, { "name": "Metrics", "parameters": [{ "name": "minFps", "type": 2 }, { "name": "maxFps", "type": 2 }, { "name": "currentFps", "type": 2 }, { "name": "averageFps", "type": 2 }, { "name": "framesRendered", "type": 2 }, { "name": "framesInterpolated", "type": 2 }, { "name": "framesExtrapolated", "type": 2 }, { "name": "allocatedNetworkEntities", "type": 2 }, { "name": "currentClientLag", "type": 2 }, { "name": "minClientLag", "type": 2 }, { "name": "maxClientLag", "type": 2 }, { "name": "currentPing", "type": 2 }, { "name": "minPing", "type": 2 }, { "name": "maxPing", "type": 2 }, { "name": "averagePing", "type": 2 }, { "name": "longFrames", "type": 2 }, { "name": "stutters", "type": 2 }, { "name": "group", "type": 0 }, { "name": "isMobile", "type": 0 }, { "name": "timeResets", "type": 2 }, { "name": "maxExtrapolationTime", "type": 2 }, { "name": "extrapolationIncidents", "type": 2 }, { "name": "totalExtrapolationTime", "type": 2 }, { "name": "differenceInClientTime", "type": 2 }], "isArray": false, "index": 3 }, { "name": "DayCycle", "parameters": [{ "name": "cycleStartTick", "type": 0 }, { "name": "nightEndTick", "type": 0 }, { "name": "dayEndTick", "type": 0 }, { "name": "isDay", "type": 0 }], "isArray": false, "index": 4 }, { "name": "MakeBuilding", "parameters": [{ "name": "x", "type": 1 }, { "name": "y", "type": 1 }, { "name": "type", "type": 3 }, { "name": "yaw", "type": 1 }], "isArray": false, "index": 5 }, { "name": "BuildingShopPrices", "parameters": [{ "name": "json", "type": 3 }], "isArray": false, "index": 6 }, { "name": "ItemShopPrices", "parameters": [{ "name": "json", "type": 3 }, { "name": "json", "type": 3 }], "isArray": false, "index": 7 }, { "name": "LocalBuilding", "parameters": [{ "name": "x", "type": 1 }, { "name": "y", "type": 1 }, { "name": "type", "type": 3 }, { "name": "dead", "type": 0 }, { "name": "uid", "type": 0 }, { "name": "tier", "type": 0 }], "isArray": true, "index": 8 }, { "name": "Dead", "parameters": [{ "name": "stashDied", "type": 0 }], "isArray": false, "index": 9 }, { "name": "Admin", "parameters": [{ "name": "password", "type": 3 }, { "name": "command", "type": 3 }], "isArray": false, "index": 10 }, { "name": "UpgradeBuilding", "parameters": [{ "name": "uid", "type": 0 }], "isArray": false, "index": 11 }, { "name": "DeleteBuilding", "parameters": [{ "name": "uid", "type": 0 }], "isArray": false, "index": 12 }, { "name": "BuyItem", "parameters": [{ "name": "itemName", "type": 3 }, { "name": "tier", "type": 0 }], "isArray": false, "index": 13 }, { "name": "SetItem", "parameters": [{ "name": "itemName", "type": 3 }, { "name": "tier", "type": 0 }, { "name": "stacks", "type": 0 }], "isArray": false, "index": 14 }, { "name": "EquipItem", "parameters": [{ "name": "itemName", "type": 3 }, { "name": "tier", "type": 0 }], "isArray": false, "index": 15 }, { "name": "SetOpenParty", "parameters": [{ "name": "isOpen", "type": 0 }], "isArray": false, "index": 16 }, { "name": "SetPartyName", "parameters": [{ "name": "partyName", "type": 3 }], "isArray": false, "index": 17 }, { "name": "SetPartyMemberCanSell", "parameters": [{ "name": "uid", "type": 0 }, { "name": "canSell", "type": 0 }], "isArray": false, "index": 18 }, { "name": "JoinParty", "parameters": [{ "name": "partyId", "type": 0 }], "isArray": false, "index": 19 }, { "name": "JoinPartyByShareKey", "parameters": [{ "name": "partyShareKey", "type": 3 }], "isArray": false, "index": 20 }, { "name": "PartyApplicant", "parameters": [{ "name": "displayName", "type": 3 }, { "name": "applicantUid", "type": 0 }], "isArray": false, "index": 21 }, { "name": "PartyApplicantDecide", "parameters": [{ "name": "applicantUid", "type": 0 }, { "name": "accepted", "type": 0 }], "isArray": false, "index": 22 }, { "name": "PartyApplicantDenied", "parameters": [], "isArray": false, "index": 23 }, { "name": "PartyApplicantExpired", "parameters": [{ "name": "applicantUid", "type": 0 }], "isArray": false, "index": 24 }, { "name": "PartyShareKey", "parameters": [{ "name": "partyShareKey", "type": 3 }], "isArray": false, "index": 25 }, { "name": "PartyInfo", "parameters": [{ "name": "playerUid", "type": 0 }, { "name": "displayName", "type": 3 }, { "name": "isLeader", "type": 0 }, { "name": "canSell", "type": 0 }], "isArray": true, "index": 26 }, { "name": "AddParty", "parameters": [{ "name": "partyId", "type": 0 }, { "name": "partyName", "type": 3 }, { "name": "isOpen", "type": 0 }, { "name": "memberCount", "type": 0 }], "isArray": false, "index": 27 }, { "name": "RemoveParty", "parameters": [{ "name": "partyId", "type": 0 }], "isArray": false, "index": 28 }, { "name": "Leaderboard", "parameters": [{ "name": "name", "type": 3 }, { "name": "uid", "type": 0 }, { "name": "rank", "type": 0 }, { "name": "score", "type": 4 }, { "name": "wave", "type": 0 }], "isArray": true, "index": 29 }, { "name": "Failure", "parameters": [{ "name": "category", "type": 3 }, { "name": "reason", "type": 3 }, { "name": "x", "type": 0 }, { "name": "y", "type": 0 }, { "name": "type", "type": 3 }], "isArray": false, "index": 30 }, { "name": "RecallPet", "parameters": [], "isArray": false, "index": 31 }, { "name": "LeaveParty", "parameters": [], "isArray": false, "index": 32 }, { "name": "KickParty", "parameters": [{ "name": "uid", "type": 0 }], "isArray": false, "index": 33 }, { "name": "AddDepositToHarvester", "parameters": [{ "name": "uid", "type": 0 }, { "name": "deposit", "type": 2 }], "isArray": false, "index": 34 }, { "name": "CollectHarvester", "parameters": [{ "name": "uid", "type": 0 }], "isArray": false, "index": 35 }, { "name": "CastSpell", "parameters": [{ "name": "spell", "type": 3 }, { "name": "x", "type": 1 }, { "name": "y", "type": 1 }, { "name": "tier", "type": 0 }], "isArray": false, "index": 36 }, { "name": "CastSpellResponse", "parameters": [{ "name": "spell", "type": 3 }, { "name": "cooldown", "type": 0 }, { "name": "cooldownStartTick", "type": 0 }], "isArray": false, "index": 37 }, { "name": "Spells", "parameters": [{ "name": "json", "type": 3 }], "isArray": false, "index": 38 }, { "name": "SetPartyList", "parameters": [{ "name": "partyId", "type": 0 }, { "name": "partyName", "type": 3 }, { "name": "isOpen", "type": 0 }, { "name": "memberCount", "type": 0 }], "isArray": true, "index": 39 }], "rpcMapsByName": { "Shutdown": { "name": "Shutdown", "parameters": [{ "name": "reason", "type": 3 }, { "name": "shutdownUnix", "type": 0 }], "isArray": false, "index": 0 }, "ReceiveChatMessage": { "name": "ReceiveChatMessage", "parameters": [{ "name": "displayName", "type": 3 }, { "name": "channel", "type": 3 }, { "name": "message", "type": 3 }, { "name": "uid", "type": 0 }], "isArray": false, "index": 1 }, "SendChatMessage": { "name": "SendChatMessage", "parameters": [{ "name": "channel", "type": 3 }, { "name": "message", "type": 3 }], "isArray": false, "index": 2 }, "Metrics": { "name": "Metrics", "parameters": [{ "name": "minFps", "type": 2 }, { "name": "maxFps", "type": 2 }, { "name": "currentFps", "type": 2 }, { "name": "averageFps", "type": 2 }, { "name": "framesRendered", "type": 2 }, { "name": "framesInterpolated", "type": 2 }, { "name": "framesExtrapolated", "type": 2 }, { "name": "allocatedNetworkEntities", "type": 2 }, { "name": "currentClientLag", "type": 2 }, { "name": "minClientLag", "type": 2 }, { "name": "maxClientLag", "type": 2 }, { "name": "currentPing", "type": 2 }, { "name": "minPing", "type": 2 }, { "name": "maxPing", "type": 2 }, { "name": "averagePing", "type": 2 }, { "name": "longFrames", "type": 2 }, { "name": "stutters", "type": 2 }, { "name": "group", "type": 0 }, { "name": "isMobile", "type": 0 }, { "name": "timeResets", "type": 2 }, { "name": "maxExtrapolationTime", "type": 2 }, { "name": "extrapolationIncidents", "type": 2 }, { "name": "totalExtrapolationTime", "type": 2 }, { "name": "differenceInClientTime", "type": 2 }], "isArray": false, "index": 3 }, "DayCycle": { "name": "DayCycle", "parameters": [{ "name": "cycleStartTick", "type": 0 }, { "name": "nightEndTick", "type": 0 }, { "name": "dayEndTick", "type": 0 }, { "name": "isDay", "type": 0 }], "isArray": false, "index": 4 }, "MakeBuilding": { "name": "MakeBuilding", "parameters": [{ "name": "x", "type": 1 }, { "name": "y", "type": 1 }, { "name": "type", "type": 3 }, { "name": "yaw", "type": 1 }], "isArray": false, "index": 5 }, "BuildingShopPrices": { "name": "BuildingShopPrices", "parameters": [{ "name": "json", "type": 3 }], "isArray": false, "index": 6 }, "ItemShopPrices": { "name": "ItemShopPrices", "parameters": [{ "name": "json", "type": 3 }, { "name": "json", "type": 3 }], "isArray": false, "index": 7 }, "LocalBuilding": { "name": "LocalBuilding", "parameters": [{ "name": "x", "type": 1 }, { "name": "y", "type": 1 }, { "name": "type", "type": 3 }, { "name": "dead", "type": 0 }, { "name": "uid", "type": 0 }, { "name": "tier", "type": 0 }], "isArray": true, "index": 8 }, "Dead": { "name": "Dead", "parameters": [{ "name": "stashDied", "type": 0 }], "isArray": false, "index": 9 }, "Admin": { "name": "Admin", "parameters": [{ "name": "password", "type": 3 }, { "name": "command", "type": 3 }], "isArray": false, "index": 10 }, "UpgradeBuilding": { "name": "UpgradeBuilding", "parameters": [{ "name": "uid", "type": 0 }], "isArray": false, "index": 11 }, "DeleteBuilding": { "name": "DeleteBuilding", "parameters": [{ "name": "uid", "type": 0 }], "isArray": false, "index": 12 }, "BuyItem": { "name": "BuyItem", "parameters": [{ "name": "itemName", "type": 3 }, { "name": "tier", "type": 0 }], "isArray": false, "index": 13 }, "SetItem": { "name": "SetItem", "parameters": [{ "name": "itemName", "type": 3 }, { "name": "tier", "type": 0 }, { "name": "stacks", "type": 0 }], "isArray": false, "index": 14 }, "EquipItem": { "name": "EquipItem", "parameters": [{ "name": "itemName", "type": 3 }, { "name": "tier", "type": 0 }], "isArray": false, "index": 15 }, "SetOpenParty": { "name": "SetOpenParty", "parameters": [{ "name": "isOpen", "type": 0 }], "isArray": false, "index": 16 }, "SetPartyName": { "name": "SetPartyName", "parameters": [{ "name": "partyName", "type": 3 }], "isArray": false, "index": 17 }, "SetPartyMemberCanSell": { "name": "SetPartyMemberCanSell", "parameters": [{ "name": "uid", "type": 0 }, { "name": "canSell", "type": 0 }], "isArray": false, "index": 18 }, "JoinParty": { "name": "JoinParty", "parameters": [{ "name": "partyId", "type": 0 }], "isArray": false, "index": 19 }, "JoinPartyByShareKey": { "name": "JoinPartyByShareKey", "parameters": [{ "name": "partyShareKey", "type": 3 }], "isArray": false, "index": 20 }, "PartyApplicant": { "name": "PartyApplicant", "parameters": [{ "name": "displayName", "type": 3 }, { "name": "applicantUid", "type": 0 }], "isArray": false, "index": 21 }, "PartyApplicantDecide": { "name": "PartyApplicantDecide", "parameters": [{ "name": "applicantUid", "type": 0 }, { "name": "accepted", "type": 0 }], "isArray": false, "index": 22 }, "PartyApplicantDenied": { "name": "PartyApplicantDenied", "parameters": [], "isArray": false, "index": 23 }, "PartyApplicantExpired": { "name": "PartyApplicantExpired", "parameters": [{ "name": "applicantUid", "type": 0 }], "isArray": false, "index": 24 }, "PartyShareKey": { "name": "PartyShareKey", "parameters": [{ "name": "partyShareKey", "type": 3 }], "isArray": false, "index": 25 }, "PartyInfo": { "name": "PartyInfo", "parameters": [{ "name": "playerUid", "type": 0 }, { "name": "displayName", "type": 3 }, { "name": "isLeader", "type": 0 }, { "name": "canSell", "type": 0 }], "isArray": true, "index": 26 }, "AddParty": { "name": "AddParty", "parameters": [{ "name": "partyId", "type": 0 }, { "name": "partyName", "type": 3 }, { "name": "isOpen", "type": 0 }, { "name": "memberCount", "type": 0 }], "isArray": false, "index": 27 }, "RemoveParty": { "name": "RemoveParty", "parameters": [{ "name": "partyId", "type": 0 }], "isArray": false, "index": 28 }, "Leaderboard": { "name": "Leaderboard", "parameters": [{ "name": "name", "type": 3 }, { "name": "uid", "type": 0 }, { "name": "rank", "type": 0 }, { "name": "score", "type": 4 }, { "name": "wave", "type": 0 }], "isArray": true, "index": 29 }, "Failure": { "name": "Failure", "parameters": [{ "name": "category", "type": 3 }, { "name": "reason", "type": 3 }, { "name": "x", "type": 0 }, { "name": "y", "type": 0 }, { "name": "type", "type": 3 }], "isArray": false, "index": 30 }, "RecallPet": { "name": "RecallPet", "parameters": [], "isArray": false, "index": 31 }, "LeaveParty": { "name": "LeaveParty", "parameters": [], "isArray": false, "index": 32 }, "KickParty": { "name": "KickParty", "parameters": [{ "name": "uid", "type": 0 }], "isArray": false, "index": 33 }, "AddDepositToHarvester": { "name": "AddDepositToHarvester", "parameters": [{ "name": "uid", "type": 0 }, { "name": "deposit", "type": 2 }], "isArray": false, "index": 34 }, "CollectHarvester": { "name": "CollectHarvester", "parameters": [{ "name": "uid", "type": 0 }], "isArray": false, "index": 35 }, "CastSpell": { "name": "CastSpell", "parameters": [{ "name": "spell", "type": 3 }, { "name": "x", "type": 1 }, { "name": "y", "type": 1 }, { "name": "tier", "type": 0 }], "isArray": false, "index": 36 }, "CastSpellResponse": { "name": "CastSpellResponse", "parameters": [{ "name": "spell", "type": 3 }, { "name": "cooldown", "type": 0 }, { "name": "cooldownStartTick", "type": 0 }], "isArray": false, "index": 37 }, "Spells": { "name": "Spells", "parameters": [{ "name": "json", "type": 3 }], "isArray": false, "index": 38 }, "SetPartyList": { "name": "SetPartyList", "parameters": [{ "name": "partyId", "type": 0 }, { "name": "partyName", "type": 3 }, { "name": "isOpen", "type": 0 }, { "name": "memberCount", "type": 0 }], "isArray": true, "index": 39 } }, "sortedUidsByType": { "667546015": [], "742594995": [], "1059671174": [], "1372600389": [463, 581], "1496910567": [892, 893, 894], "1566069472": [], "1672634632": [823], "1816895259": [], "2092990061": [], "2093252446": [106, 195, 201, 249, 284, 390], "2347737811": [18919], "2402467733": [], "2462472648": [], "2464630638": [], "2899981078": [], "2969697641": [] }, "removedEntities": {}, "absentEntitiesFlags": [1], "updatedEntityFlags": [0, 0, 0, 128, 0, 0] };
+            const onMessage2 = (event) => {
+                game.network.emitter.emit(e_PacketId[event.opcode], event);
+            }
             
-            // CORREÇÃO: WebSocket sem porta fixa!
+            // ========== CORREÇÃO: WEBSOCKET CORRETO ==========
             const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${wsProtocol}//${window.location.host}/ws`;
+            const urlObj = {
+                localhost: `${wsProtocol}//${location.hostname}/ws`
+            }
             
-            console.log(`🔌 WebSocket URL: ${wsUrl}`);
+            const prfKeys = {};
+            Object.keys(urlObj).forEach((e) => {
+                prfKeys[e] = [""];
+            });
             
-            let game = null;
-            let userInstance = null;
-            
-            // ========== WEBSOCKET CORRIGIDO ==========
             class Ws {
-                constructor() {
-                    this.ws = new WebSocket(wsUrl);
+                constructor(type) {
+                    this.ws = new WebSocket(urlObj[document.getElementsByClassName("dropdown")[0].value.toLowerCase()]);
                     this.ws.binaryType = "arraybuffer";
                     this.userId = null;
-                    this.activeSessions = {};
                     this.ws.onopen = this.onOpen.bind(this);
-                    this.ws.onmessage = this.onMessage.bind(this);
-                    this.ws.onclose = this.onClose.bind(this);
-                    this.ws.onerror = this.onError.bind(this);
                 }
-                
-                onError(err) {
-                    console.error("❌ WebSocket erro:", err);
+                decode(e) {
+                    return new TextDecoder().decode(e);
                 }
-                
+                sendMessage(m) {
+                    if (this.ws.readyState === 1) {
+                        this.ws.send(m);
+                    }
+                }
                 onOpen() {
-                    console.log("✅ WebSocket conectado!");
+                    const server = document.getElementsByClassName("dropdown")[0].value;
                     this.sendMessage(`salt,  ;${localStorage.salt}`);
                 }
-                
-                onClose() {
-                    console.log("⚠️ WebSocket desconectado, tentando reconectar...");
-                    setTimeout(() => {
-                        this.ws = new WebSocket(wsUrl);
-                        this.ws.binaryType = "arraybuffer";
-                        this.ws.onopen = this.onOpen.bind(this);
-                        this.ws.onmessage = this.onMessage.bind(this);
-                        this.ws.onclose = this.onClose.bind(this);
-                        this.ws.onerror = this.onError.bind(this);
-                    }, 5000);
+            }
+            
+            class User extends Ws {
+                constructor() {
+                    super("user");
+                    this.activeSessions = {};
+                    this.ws.onmessage = this.onMessage.bind(this);
+                    this.ws.onclose = this.onClose.bind(this);
                 }
-                
-                sendMessage(msg) {
-                    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-                        this.ws.send(msg);
+                onMessage(m) {
+                    const x = new Uint8Array(m.data);
+                    if (x[0] === 0 || x[0] === 9) {
+                        const obj = game.network.codec.decode(x);
+                        if (obj.opcode === 0 || obj.opcode === 9) {
+                            onMessage2(obj);
+                        }
+                        return;
+                    }
+                    const msg = this.decode(m.data);
+                    if (msg) {
+                        switch (msg.split(" ")[0].replaceAll(",", "")) {
+                            case "accesssuccess":
+                                this.sendMessage("user");
+                                this.sendMessage("getsessionstats");
+                                break;
+                            case "id":
+                                this.userId = parseInt(msg.split(",  ;")[1]);
+                                if (game.world.inWorld && this.connectedToId) {
+                                    game.ui.buildings = {};
+                                    this.verify(this.connectedToId);
+                                }
+                                break;
+                            case "sessions":
+                                const args2 = msg.split(",  ;");
+                                this.activeSessions = JSON.parse(args2[1]);
+                                document.getElementsByClassName("savedsessions")[0].innerHTML = "";
+                                Object.values(this.activeSessions).sort((a, b) => a.sessionUserId - b.sessionUserId).forEach((e) => {
+                                    const id = parseInt(e.actualUserId);
+                                    document.getElementsByClassName("savedsessions")[0].innerHTML += `<button style="background: #222222; color: white; font-family: Hammersmith One, sans-serif" onclick="user.verify(${id})">${e.sessionName ? Sanitize(e.sessionName) : "Session"} [${id} | ${parseInt(e.sessionUserId)}]</button>`;
+                                });
+                                break;
+                            case "sessionstates":
+                                try {
+                                    window.sessionScriptStates = JSON.parse(msg.split(",  ;").slice(1).join(",  ;"));
+                                    if (window.ban && window.ban.applySessionStates) {
+                                        window.ban.applySessionStates(window.sessionScriptStates);
+                                    }
+                                } catch { };
+                                break;
+                            case "sessionstats":
+                                try {
+                                    window.sessionStats = JSON.parse(msg.split(",  ;").slice(1).join(",  ;"));
+                                    if (window.ban && window.ban.applySessionStats) {
+                                        window.ban.applySessionStats(window.sessionStats);
+                                    }
+                                } catch { };
+                                break;
+                            case "verifydata":
+                                const args = msg.split(",  ;").slice(1).join(",  ;");
+                                const data = JSON.parse(args);
+                                this.applyVerifyData(data);
+                                break;
+                                break;
+                            case "prfpsks":
+                                const msg2 = msg.slice(11, msg.length).split(",");
+                                prfKeys[document.getElementsByClassName("dropdown")[0].value.toLowerCase()] = [""];
+                                msg2.forEach((m) => {
+                                    if (msg.split(",  ;")[1] !== "") {
+                                        prfKeys[document.getElementsByClassName("dropdown")[0].value.toLowerCase()].push(m);
+                                    }
+                                });
+                                let pskVal = document.getElementsByClassName("dropdown")[1].value;
+                                const sesKeys = prfKeys[document.getElementsByClassName("dropdown")[0].value.toLowerCase()];
+                                if (!sesKeys.includes(pskVal)) {
+                                    pskVal = null;
+                                }
+                                document.getElementsByClassName("dropdown")[1].innerHTML = "";
+                                for (const key of sesKeys) {
+                                    document.getElementsByClassName("dropdown")[1].innerHTML += `<option>${key}</option>`;
+                                }
+                                document.getElementsByClassName("dropdown")[1].value = pskVal || sesKeys[0];
+                                break;
+                            case "uptime":
+                                game.ui.components.PopupOverlay.showHint(`Uptime: ${((Date.now() - parseInt(msg.split(",  ;")[1])) / 8.64e7).toFixed(2)} days`);
+                                break;
+                        }
                     }
                 }
-                
-                onMessage(event) {
-                    const msg = event.data.toString();
-                    console.log("📨", msg.substring(0, 100));
-                    
-                    const parts = msg.split(",  ;");
-                    const cmd = parts[0].replaceAll(",", "");
-                    
-                    switch(cmd) {
-                        case "accesssuccess":
-                            this.sendMessage("user");
-                            this.sendMessage("getsessionstats");
-                            break;
-                        case "id":
-                            this.userId = parseInt(parts[1]);
-                            console.log(`🆔 User ID: ${this.userId}`);
-                            break;
-                        case "sessions":
-                            try {
-                                this.activeSessions = JSON.parse(parts[1] || "{}");
-                                this.updateSessionsDisplay();
-                            } catch(e) {}
-                            break;
-                        default:
-                            if (msg.includes("createsession")) {
-                                console.log("✅ Comando processado");
-                            }
+                applyVerifyData(data) {
+                    const codec = codecJSON;
+                    for (let i in codec) {
+                        game.network.codec[i] = codec[i];
                     }
-                }
-                
-                updateSessionsDisplay() {
-                    const sessionsDiv = document.getElementsByClassName("savedsessions")[0];
-                    if (!sessionsDiv) return;
-                    sessionsDiv.innerHTML = "";
-                    Object.values(this.activeSessions).forEach((session) => {
-                        const id = session.actualUserId;
-                        const btn = document.createElement("button");
-                        btn.style.cssText = "background: #222; color: white; margin: 2px; padding: 4px 8px; cursor: pointer; border: 1px solid #444; border-radius: 3px;";
-                        btn.textContent = `${session.sessionName || "Session"} [${id}]`;
-                        btn.onclick = () => this.sendMessage(`verify,  ;${id}`);
-                        sessionsDiv.appendChild(btn);
+                    const sortedUidsByType = {};
+                    for (const entityType in data.sortedUidsByType) {
+                        sortedUidsByType[entityType] = Uint32Vector.fromArray(data.sortedUidsByType[entityType]);
+                    }
+                    game.network.codec.sortedUidsByType = sortedUidsByType;
+                    game.network.codec.removedEntitiesObj = data.removedEntitiesObj;
+                    game.network.codec.absentEntitiesFlags = data.absentEntitiesFlags;
+                    game.network.codec.updatedEntityFlags = data.updatedEntityFlags;
+                    game.network.socket = { readyState: 1 };
+                    game.network.socket.send = (e) => this.sendBuffer(new Uint8Array(e));
+                    game.network.sendPacket = (e, t) => {
+                        if (e === 4 || e === 5 || e === 6 || e === 7) return;
+                        this.sendPacket(e, t);
+                    }
+                    game.options.serverId = data.serverId;
+                    game.network.connectionOptions = serverObj[data.serverId];
+                    document.useRequiredEquipment = true;
+                    for (let i = 0; i < jsons.length; i++) {
+                        onMessage2(jsons[i]);
+                    }
+                    for (let i = 0; i < data.syncNeeds.length; i++) {
+                        onMessage2(data.syncNeeds[i]);
+                    }
+                    if (getElement("hud-chat-message").length === 0) {
+                        for (let i = 0; i < data.messages.length; i++) {
+                            game.ui.components.Chat.onMessageReceived(data.messages[i]);
+                        }
+                    }
+                    if (data.isPaused) {
+                        game.ui.onLocalItemUpdate({ itemName: "Pause", tier: 1, stacks: 1 });
+                        game.ui.emit("wavePaused");
+                    }
+                    for (let i in data.inventory) {
+                        onMessage2({ name: "SetItem", response: { itemName: data.inventory[i].itemName, tier: data.inventory[i].tier, stacks: data.inventory[i].stacks }, opcode: 9 });
+                    }
+                    const sessionEntities = new Map(data.entities);
+                    onMessage2({ tick: data.tick, entities: sessionEntities, byteSize: data.byteSize, opcode: 0 });
+                    for (let i in game.ui.buildingUids_1) {
+                        delete game.ui.buildingUids_1[i];
+                    }
+                    onMessage2({ name: "LocalBuilding", response: data.localBuildings, opcode: 9 });
+                    if (sessionEntities.get(data.syncNeeds[0].uid) && sessionEntities.get(data.syncNeeds[0].uid).dead && !game.ui.components.Respawn.isVisible()) {
+                        const loadingScreenDisabled = window.isBansheeSessionLoaderDisabled && window.isBansheeSessionLoaderDisabled();
+                        game.ui.components.Respawn.respawnTextElem.innerHTML = "You got killed... but fear not — your fortress survives! Now go get some pussy";                        
+                        if (loadingScreenDisabled && window.showBansheeSessionLoader) {
+                            game.ui.components.Respawn.show();
+                        } else {
+                            if (!window.isPlayerDead) window.isPlayerDead = true;
+                        }
+                    }
+                    game.world.entities.forEach((e) => {
+                        if (sessionEntities.get(e.uid)) {
+                            game.world.entities.delete(e.uid);
+                            game.world._removeEntityFromList(e.uid);
+                            game.world.beginRemovedEntityFade(e);
+                        }
                     });
+                    if (window.hideBansheeSessionLoader) window.hideBansheeSessionLoader();
+                    document.title = `BAN_SESSION #${this.connectedToId} - ${ban.players}, ${Object.keys(window.socketsByUid).length}`;
+                    if (ban.scripts.autobuild) ban.scripts.autobuild = false;
+                    if (ban.scripts.autoupgrade) ban.scripts.autoupgrade = false;
+                    if (this.serverId !== game.options.serverId) {
+                        this.serverId = game.options.serverId;
+                        window.serverspots = false;
+                        ban.spotId = null;
+                    }  
                 }
-                
-                createSession(sessionName, playerName, serverId, partyKey) {
-                    this.sendMessage(`createsession,  ;${sessionName},  ;${playerName},  ;${serverId},  ;${partyKey}`);
+                verify(id) {
+                    id = parseInt(id);
+                    if (!Number.isFinite(id)) return;
+                    const loadingScreenDisabled = window.isBansheeSessionLoaderDisabled && window.isBansheeSessionLoaderDisabled();
+                    const shouldShowLoader = !loadingScreenDisabled && !window.skipLoadingAnimation;
+                    if (shouldShowLoader && window.showBansheeSessionLoader) {
+                        window.skipLoadingAnimation = true;
+                        window.showBansheeSessionLoader();
+                        game.renderer.entities.setVisible(false);
+                        game.ui.components.Respawn.hide();
+                        game.ui.components.BuffBar.hide();
+                        game.ui.components.PipOverlay.hide();
+                        game.ui.components.PopupOverlay.hide();
+                        game.ui.components.AnnouncementOverlay.hide();
+                        document.getElementsByClassName("hud-top-left")[0].style.display = "none";
+                        document.getElementsByClassName("hud-top-right")[0].style.display = "none";
+                        document.getElementsByClassName("hud-center-left")[0].style.display = "none";
+                        document.getElementsByClassName("hud-center-right")[0].style.display = "none";
+                        document.getElementsByClassName("hud-bottom-left")[0].style.display = "none";
+                        document.getElementsByClassName("hud-bottom-center")[0].style.display = "none";
+                        document.getElementsByClassName("hud-bottom-right")[0].style.display = "none";
+                    } else {
+                        document.getElementsByClassName("hud-top-left")[0].style.display = "flex";
+                        document.getElementsByClassName("hud-center-left")[0].style.display = "flex";
+                        document.getElementsByClassName("hud-center-right")[0].style.display = "flex";
+                        document.getElementsByClassName("hud-bottom-left")[0].style.display = "flex";
+                        document.getElementsByClassName("hud-bottom-center")[0].style.display = "flex";
+                        document.getElementsByClassName("hud-bottom-right")[0].style.display = "flex";
+                    }
+                    this.sendMessage(`verify,  ;${id}`);
+                    this.connectedToId = id;
+                    setTimeout(() => this.sendMessage("getsessionstats"), 300);
                 }
-                
+                sendPacket(opcode, data) {
+                    const buffer = new Uint8Array(game.network.codec.encode(opcode, data));
+                    const arr = [1];
+                    for (let i = 0; i < buffer.length; i++) {
+                        arr.push(buffer[i]);
+                    }
+                    if (this.ws.readyState === 1) {
+                        this.ws.send(new Uint8Array(arr));
+                    }
+                }
+                sendBuffer(buffer) {
+                    const arr = [2];
+                    for (let i = 0; i < buffer.length; i++) {
+                        arr.push(buffer[i]);
+                    }
+                    if (this.ws.readyState === 1) {
+                        this.ws.send(new Uint8Array(arr));
+                    }
+                }
+                createSession(sessionname, name, sid, psk) {
+                    this.sendMessage(`createsession,  ;${sessionname},  ;${name},  ;${sid},  ;${psk}`);
+                }
                 getSessions() {
                     this.sendMessage("getsessions");
                 }
+                disconnect() {
+                    this.ws.close();
+                }
+                closeSession(id) {
+                    this.sendMessage("closesession,  ;" + id);
+                }
+                reconnect(closed) {
+                    if (!closed) {
+                        this.reconnecting = true;
+                    }
+                    this.disconnect();
+                    this.ws = new User().ws;
+                    this.ws.onopen = this.onOpen.bind(this);
+                    this.ws.onmessage = this.onMessage.bind(this);
+                    this.ws.onclose = this.onClose.bind(this);
+                }
+                onClose() {
+                    if (this.reconnecting) {
+                        this.reconnecting = false;
+                        return;
+                    }
+                    if (window.hideBansheeSessionLoader) window.hideBansheeSessionLoader();
+                    setTimeout(() => {
+                        this.reconnect(true);
+                    }, 1000);
+                }
+                changePassword(password) {
+                    this.sendMessage(`changehasaccess,  ;${password}`);
+                }
             }
             
-            // ========== FUNÇÃO DO BOTÃO ==========
-            function createSession() {
-                if (!userInstance) {
-                    alert("Sistema não inicializado.");
-                    return;
+            class ScannerAPI {
+                constructor() {
+                    this.baseUrl = "http://95.111.234.133/api/";
+                    this.searchOptions = {
+                        players: new Set(["uid", "serverId", "name", "partyId"]),
+                        stashes: new Set(["serverId", "partyId", "tier", "uid"]),
+                        servers: new Set(["serverId", "population"])
+                    }
+                    this.searchTypes = new Set(["players", "stashes", "servers"]);
+                    this.leaderboards = new Map();
+                    this.setLbsMap();
                 }
-                
-                const nameInput = document.getElementById("hud-intro-name");
-                const serverSelect = document.getElementById("serverSelect");
+                async fetchApiData(type, parameters = {}) {
+                    if (typeof parameters === "object") {
+                        if (this.searchTypes.has(type)) {
+                            if (!parameters || !Object.keys(parameters).length) {
+                                const url = this.baseUrl + type;
+                                const response = await fetch(url);
+                                return response.json();
+                            } else {
+                                let url = this.baseUrl + type;
+                                let paramStr = "?";
+                                for (let i in parameters) if (this.searchOptions[type].has(i)) paramStr += `${i}=${parameters[i]}&`;
+                                url += paramStr;
+                                const response = await fetch(url);
+                                return response.json();
+                            }
+                        }
+                    }
+                }
+                setLbsMap() {
+                    this.getServers().then((lbs) => {
+                        const lbMap = new Map();
+                        lbs.forEach((lb) => lbMap.set(lb.serverId, lb.leaderboard));
+                        const pops = { v1: 0, v2: 0, v5: 0, v3: 0, v4: 0, total: 0 };
+                        for (let i = 0; i < lbs.length; i++) {
+                            const server = lbs[i];
+                            const split = document.getElementsByClassName("hud-intro-server")[0].options[i].innerText.split("[");
+                            document.getElementsByClassName("hud-intro-server")[0].options[i].innerText = `${split[0]} [${server.population}/40]`;
+                            pops.total += server.population;
+                            pops[document.getElementsByClassName("hud-intro-server")[0].options[i].value.split("0")[0]] += server.population;
+                        }
+                        document.getElementsByClassName("hud-intro-server")[0].children[0].label = `US East [${pops.v1}/320]`;
+                        document.getElementsByClassName("hud-intro-server")[0].children[1].label = `US West [${pops.v2}/120]`;
+                        document.getElementsByClassName("hud-intro-server")[0].children[2].label = `Europe [${pops.v5}/280]`;
+                        document.getElementsByClassName("hud-intro-server")[0].children[3].label = `Asia [${pops.v3}/40]`;
+                        document.getElementsByClassName("hud-intro-server")[0].children[4].label = `Australia [${pops.v4}/80]`;
+                        document.getElementsByClassName("hud-intro-player-count")[0].innerText = `Players in game: ${pops.total}/840 (${(pops.total / 8.4).toFixed(2)}% full)`;
+                        this.leaderboards = lbMap;
+                        this.addSelectListener();
+                        this.setLb(this.leaderboards.get(document.getElementsByClassName("hud-intro-server")[0].value));
+                    });
+                }
+                onSelect(value = "v5001") {
+                    this.setLb(this.leaderboards.get(value));
+                }
+                addSelectListener() {
+                    document.getElementsByClassName("hud-intro-server")[0].addEventListener("change", () => {
+                        this.onSelect(document.getElementsByClassName("hud-intro-server")[0].value);
+                    });
+                }
+                setLb(serverId = "v5001") {
+                    game.ui.components.Leaderboard.leaderboardData = serverId;
+                    game.ui.components.Leaderboard.update();
+                }
+                getServers(parameters = {}) {
+                    return this.fetchApiData("servers", parameters);
+                }
+                getStashes(parameters = {}) {
+                    this.fetchApiData("stashes", parameters).then((data) => {
+                        for (let i in data) {
+                            const e = data[i];
+                            game.ui.components.Chat.onMessageReceived({ displayName: "GoldStash", message: `X ${ban.counter(e.position.x)}, Y ${ban.counter(e.position.y)}, PID ${e.partyId} (${game.ui.parties[e.partyId] ? game.ui.parties[e.partyId].memberCount : 1}) T${e.tier}`, uid: e.uid });
+                        }
+                    });
+                }
+                getPlayers(parameters = {}) {
+                    this.fetchApiData("players", parameters).then((data) => {
+                        for (let i in data) {
+                            const e = data[i];
+                            const rank = game.ui.components.Leaderboard.leaderboardData.find(x => x.uid === e.uid);
+                            game.ui.components.Chat.onMessageReceived({ displayName: e.name, message: `X ${ban.counter(e.position.x)}, Y ${ban.counter(e.position.y)}, PID ${e.partyId} (${game.ui.parties[e.partyId] ? game.ui.parties[e.partyId].memberCount : 1}) ${rank ? `#${rank.rank + 1}` : ""}`, uid: e.uid });
+                        }
+                    });
+                }
+            }
+            
+            const sendSession = () => {
+                user.createSession(document.getElementsByClassName("sessionsessionname")[0].value, document.getElementsByClassName("sessionname")[0].value, document.getElementsByClassName("sessionsid")[0].value, document.getElementsByClassName("sessionpsk")[0].value);
+            }
+            
+            const enableAutoBreakIn = () => {
+                user.sendMessage(`eabi,  ;${document.getElementsByClassName("sessionsid")[0].value},  ;${document.getElementsByClassName("sessionsessionname")[0].value},  ;${document.getElementsByClassName("sessionname")[0].value},  ;${document.getElementsByClassName("sessionpsk")[0].value}`);
+                sendSession();
+            }
+            
+            const disableAutoBreakIn = () => {
+                user.sendMessage(`dabi,  ;${document.getElementsByClassName("sessionsid")[0].value}`);
+            }
+            
+            const enableAutoRefiller = () => {
+                user.sendMessage(`esrf,  ;${document.getElementsByClassName("sessionsid")[0].value}`);
+            }
+            
+            const disableAutoRefiller = () => {
+                user.sendMessage(`dsrf,  ;${document.getElementsByClassName("sessionsid")[0].value}`);
+            }
+            
+            const enableAutoReconnect = () => {
+                const sid = document.getElementsByClassName("sessionsid")[0].value;
+                user.sendMessage(`earc,  ;${sid}`);
+            }
+            
+            const disableAutoReconnect = () => {
+                const sid = document.getElementsByClassName("sessionsid")[0].value;
+                user.sendMessage(`darc,  ;${sid}`);
+            }
+            
+            const enableAutoFarm = () => {
+                const sid = document.getElementsByClassName("sessionsid")[0].value;
+                user.sendMessage(`eafr,  ;${sid}`);
+            }
+            
+            const disableAutoFarm = () => {
+                const sid = document.getElementsByClassName("sessionsid")[0].value;
+                user.sendMessage(`dafr,  ;${sid}`);
+            }
+            
+            const closeSession = () => {
+                const id = parseInt(document.getElementsByClassName("closesessioninput")[0].value);
+                if (user.activeSessions[id]) {
+                    user.closeSession(document.getElementsByClassName("closesessioninput")[0].value);
+                }
+            }
+            
+            const changesessionname = () => {
+                const id = parseInt(document.getElementsByClassName("changesessionnameinput")[0].value);
+                const name = document.getElementsByClassName("changesessionnameinput2")[0].value;
+                user.sendMessage(`changesessionname,  ;${id},  ;${name}`);
+            }
+            
+            const changesessionid = () => {
+                const id = parseInt(document.getElementsByClassName("changesessionidinput")[0].value);
+                const name = document.getElementsByClassName("changesessionidinput2")[0].value;
+                user.sendMessage(`changesessionid,  ;${id},  ;${name}`);
+            }
+            
+            const enablePartyRefiller = () => {
+                const sid = document.getElementsByClassName("prfsid")[0].value;
+                user.sendMessage(`eafp,  ;${sid}`);
+            }
+            
+            const disablePartyRefiller = () => {
+                const sid = document.getElementsByClassName("prfsid")[0].value;
+                user.sendMessage(`dafp,  ;${sid}`);
+            }
+            
+            const addPartyRefillerKey = () => {
+                const sid = document.getElementsByClassName("prfsid")[0].value;
+                const psk = document.getElementsByClassName("prfpsk")[0].value;
+                user.sendMessage(`addafpsk,  ;${psk},  ;${sid}`);
+                changeServer();
+            }
+            
+            const removePartyRefillerKey = () => {
+                const sid = document.getElementsByClassName("prfsid")[0].value;
+                const psk = document.getElementsByClassName("prfpsk")[0].value;
+                user.sendMessage(`removeafpsk,  ;${psk},  ;${sid}`);
+                changeServer();
+            }
+            
+            const changePassword = () => {
+                const password = document.getElementsByClassName("changepasswordinput")[0].value;
+                if (password.length > 0) {
+                    localStorage.salt = password;
+                    user.changePassword(localStorage.salt);
+                }
+            }
+            
+            const resetPassword = () => {
+                localStorage.salt = defaultPassword;
+                user.changePassword(localStorage.salt);
+            }
+            
+            const changeServer = () => {
+                const currentUrl = user.ws.url.slice(0, user.ws.url.length - 1);
+                const newUrl = urlObj[document.getElementsByClassName("dropdown")[0].value.toLowerCase()];
+                if (newUrl === currentUrl) {
+                    if (!window.changeTimeout) {
+                        window.changeTimeout = true;
+                        user.reconnect();
+                        setTimeout(() => {
+                            window.changeTimeout = false;
+                        }, 3000);
+                    }
+                } else {
+                    if (window.changeTimeout) window.changeTimeout = false;
+                    user.reconnect();
+                }
+            }
+            
+            // ========== CORREÇÃO DO BOTÃO SEND SESSION ==========
+            // Função que cria bot com a party key do input
+            function createSessionFromButton() {
+                const server = document.getElementsByClassName("hud-intro-server")[0].value;
+                const name = document.getElementsByClassName("hud-intro-name")[0].value;
                 const partyInput = document.getElementById("partyKeyInput");
+                const psk = partyInput ? partyInput.value : "";
                 
-                const name = nameInput ? nameInput.value.trim() : "";
-                const server = serverSelect ? serverSelect.value : "v5001";
-                const partyKey = partyInput ? partyInput.value.trim() : "";
-                
-                if (!name) {
+                if (!name || name.trim() === "") {
                     alert("Digite um nickname!");
                     return;
                 }
-                
-                if (!partyKey) {
+                if (!psk) {
                     alert("Digite a Party Share Key!");
                     return;
                 }
-                
-                userInstance.createSession(name, name, server, partyKey);
-                console.log(`✅ Bot "${name}" enviado para servidor ${server} com party ${partyKey}`);
+                user.createSession(server, name, server, psk);
+                console.log(`✅ Bot "${name}" criado na party ${psk} no servidor ${server}`);
             }
             
-            // ========== INICIALIZAÇÃO ==========
-            userInstance = new Ws();
-            window.user = userInstance;
-            
-            // Configurar botão Send Session
+            // Substituir o onclick do botão Send Session
             const sendBtn = document.getElementById("sendSessionBtn");
             if (sendBtn) {
                 sendBtn.onclick = (e) => {
                     e.preventDefault();
-                    createSession();
+                    createSessionFromButton();
+                };
+            } else {
+                document.getElementsByClassName("hud-intro-play")[1].onclick = (e) => {
+                    e.preventDefault();
+                    createSessionFromButton();
                 };
             }
             
-            // Configurar o jogo
-            try {
-                if (typeof Game !== 'undefined') {
-                    game = new Game({ stage: "prod", servers: serverObj, userGroup: 2 });
-                    game.init(() => window.preloadGameTextures());
-                }
-            } catch(e) {}
+            // Configurar o session_saver HTML
+            document.getElementsByClassName("session_saver")[0].innerHTML = `
+                <h3>Session Saver</h3>
+                <hr>
+                <input class="sessionsessionname" name="b1" style="width: 39%; background: #222222; color: white; font-family: Hammersmith One, sans-serif" value="Session" type="text" placeholder="session name" maxlength="20">
+                <button style="width: 38.5%; background: #222222; color: white; font-family: Hammersmith One, sans-serif" onclick="enableAutoBreakIn();">Enable Auto Break In</button>
+                <input class="sessionname" name="b2" style="width: 39%; background: #222222; color: white; font-family: Hammersmith One, sans-serif" value="Player" type="text" placeholder="name">
+                <button style="width: 38.5%; background: #222222; color: white; font-family: Hammersmith One, sans-serif" onclick="disableAutoBreakIn();">Disable Auto Break In</button>
+                <input class="sessionsid" name="b3" style="width: 39%; background: #222222; color: white; font-family: Hammersmith One, sans-serif" value="v5001" type="text" placeholder="server id">
+                <button style="width: 38.5%; background: #222222; color: white; font-family: Hammersmith One, sans-serif" onclick="enableAutoRefiller();">Enable Auto Refiller</button>
+                <input class="sessionpsk" name="b4" style="width: 39%; background: #222222; color: white; font-family: Hammersmith One, sans-serif" value="putpartysharekeyhere" type="text" placeholder="party share key" maxlength="20"> 
+                <button style="width: 38.5%; background: #222222; color: white; font-family: Hammersmith One, sans-serif" onclick="disableAutoRefiller();">Disable Auto Refiller</button>
+                <button style="width: 39%; background: #222222; color: white; font-family: Hammersmith One, sans-serif" onclick="enableAutoReconnect();">Enable Reconnecting</button>
+                <button style="width: 38.5%; background: #222222; color: white; font-family: Hammersmith One, sans-serif" onclick="disableAutoReconnect();">Disable Reconnecting</button>
+                <button style="width: 39%; background: #222222; color: white; font-family: Hammersmith One, sans-serif" onclick="enableAutoFarm();">Enable Auto Farm</button>
+                <button style="width: 38.5%; background: #222222; color: white; font-family: Hammersmith One, sans-serif" onclick="disableAutoFarm();">Disable Auto Farm</button>
+                <hr>
+                <input class="prfsid" name="b5" value="v5001" style="width: 43.25%; background: #222222; color: white; font-family: Hammersmith One, sans-serif" type="text" placeholder="server id" maxlength="5">
+                <input class="prfpsk" name="b6" value="putpartysharekeyhere" style="width: 38.5%; background: #222222; color: white; font-family: Hammersmith One, sans-serif" type="text" placeholder="party share key" maxlength="20">
+                <button style="width: 43.25%; background: #222222; color: white; font-family: Hammersmith One, sans-serif" onclick="addPartyRefillerKey();">Add Party Refiller Key</button>
+                <button style="width: 38.5%; background: #222222; color: white; font-family: Hammersmith One, sans-serif" onclick="enablePartyRefiller();">Enable Party Refiller</button>
+                <button style="width: 43.25%; background: #222222; color: white; font-family: Hammersmith One, sans-serif" onclick="removePartyRefillerKey();">Delete Party Refiller Key</button>
+                <button style="width: 38.5%; background: #222222; color: white; font-family: Hammersmith One, sans-serif" onclick="disablePartyRefiller();">Disable Party Refiller</button>
+                <hr>
+                <input class="closesessioninput" name="b7" style="width: 43.25%; background: #222222; color: white; font-family: Hammersmith One, sans-serif" type="number" placeholder="ses id">
+                <button style="width: 38.5%; background: #222222; color: white; font-family: Hammersmith One, sans-serif" onclick="closeSession();">Close Session</button>
+                <input class="changepasswordinput" name="b8" style="width: 43.25%; background: #222222; color: white; font-family: Hammersmith One, sans-serif" type="text" maxlength="50" placeholder="password">
+                <button style="width: 38.5%; background: #222222; color: white; font-family: Hammersmith One, sans-serif" onclick="changePassword();">Change Password</button>
+                <button style="width: 43.25%; background: #222222; color: white; font-family: Hammersmith One, sans-serif" onclick="sendSession();">Send Session</button>
+                <button style="width: 38.5%; background: #222222; color: white; font-family: Hammersmith One, sans-serif" onclick="resetPassword();">Reset Password</button>
+                <hr>
+            `;
             
-            const playerCountElem = document.querySelector(".hud-intro-player-count");
-            if (playerCountElem) {
-                playerCountElem.innerText = "BANSHEE Online";
-            }
+            document.getElementsByClassName("hud-intro-guide")[0].innerHTML = `
+                <div style="text-align:center">
+                <hr>
+                <input class="changesessionnameinput" name="b9" style="background: #222222; color: white; font-family: Hammersmith One, sans-serif" type="number" placeholder="ses id">
+                <br>
+                <input class="changesessionnameinput2" name="b10" style="background: #222222; color: white; font-family: Hammersmith One, sans-serif" type="text" placeholder="ses name">
+                <br>
+                <button style="background: #222222; color: white; font-family: Hammersmith One, sans-serif" onclick="changesessionname();">Change Session Name</button>
+                <br><br>
+                <input class="changesessionidinput" name="b11" style="background: #222222; color: white; font-family: Hammersmith One, sans-serif" type="number" placeholder="ses id">
+                <br>
+                <input class="changesessionidinput2" name="b12" style="background: #222222; color: white; font-family: Hammersmith One, sans-serif" type="number" placeholder="newest id">
+                <br>
+                <button style="background: #222222; color: white; font-family: Hammersmith One, sans-serif" onclick="changesessionid();">Change Session Id</button>
+                <br><br>
+                <select class="dropdown" name="servers" style="min-width: 150px; background: #222222; color: white; font-family: Hammersmith One, sans-serif">
+                    <option value="Localhost">Localhost</option>
+                </select>
+                <select class="dropdown" name="psks" style="background: #222222; color: white; font-family: Hammersmith One, sans-serif"></select>
+                <button style="background: #222222; color: white; font-family: Hammersmith One, sans-serif" onclick="changeServer()">Change Server</button>
+                    <p class="savedsessions"></p>
+                <hr>
+            `;
             
-            console.log("✅ BANSHEE inicializado!");
-        })();
-    </script>
-    
-    <!-- scripts originais mantidos -->
+            const user = new User();
+            const scanner = new ScannerAPI();
+        </script>
     <script src="/script.js?v=loading-slower"></script>
     <script src="/serverspots.js"></script>
 </body>
